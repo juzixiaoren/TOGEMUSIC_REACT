@@ -1,0 +1,142 @@
+.loginContainer {
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
+}
+
+.loginContainer h2 {
+    margin-left: 60px;
+    margin-bottom: 20px;
+}
+
+.inputContainer {
+    width: 100%;
+}
+
+.fieldBlock {
+    width: 60%;
+    margin-left: 60px;
+    margin-bottom: 14px;
+}
+
+.inputWrapper {
+    position: relative;
+    width: 100%;
+}
+
+
+.customInput {
+    box-sizing: border-box;
+    width: 120%;
+    height: 50px;
+    border: 0;
+
+    border-width: 2px 0;
+    border-style: solid;
+    background-color: rgba(118, 118, 118, 0.563);
+    border-color: rgba(199, 199, 199, 0.455);
+    border-radius: 30px;
+    /* Example border radius */
+    box-shadow: 0 4px 80px rgba(201, 200, 200, 0.5);
+    padding-left: 42px;
+    padding-right: 16px;
+    color: rgb(0, 0, 0);
+    font-size: 14px;
+
+    transition: 0.3s;
+}
+
+.customInput::placeholder {
+    color: rgba(255, 255, 255, 0.7);
+}
+
+/* 聚焦样式 */
+.customInput:hover,
+.customInput:focus {
+    outline: none;
+    border-color: #ffffffcb;
+    background-color: rgba(176, 176, 176, 0.563);
+}
+
+.inputIcon {
+    position: absolute;
+    left: 14px;
+    top: 50%;
+    transform: translateY(-50%);
+    width: 16px;
+    height: 16px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    color: #888;
+    pointer-events: none;
+}
+
+.inputIcon svg {
+    width: 100%;
+    height: 100%;
+}
+
+.errorMessage {
+    margin-top: 6px;
+    margin-left: 6px;
+    color: #ff4d4f;
+    font-size: 12px;
+    line-height: 1.3;
+    min-height: 16px;
+}
+
+.buttonRow {
+    display: flex;
+    gap: 12px;
+    margin-left: 60px;
+    margin-top: 8px;
+}
+
+.loginButton,
+.registerButton {
+    box-sizing: border-box;
+    width: 150px;
+    height: 45px;
+    font-size: 16px;
+    font-weight: bold;
+    color: rgb(255, 255, 255);
+    border-width: 2px 0;
+    border-style: solid;
+    border-radius: 20px;
+    transition-duration: 0.5s;
+}
+
+.loginButton {
+    background-color: rgba(255, 27, 27, 0.403);
+    border-color: rgba(255, 113, 113, 0.455);
+}
+
+.loginButton:hover {
+    box-shadow: 0 0 20px rgb(255, 81, 81);
+}
+
+.registerButton {
+    background-color: rgba(0, 132, 255, 0.35);
+    border-color: rgba(105, 187, 255, 0.5);
+}
+
+.registerButton:hover {
+    box-shadow: 0 0 20px rgba(105, 187, 255, 0.8);
+}
+
+@media (max-width: 768px) {
+    .fieldBlock {
+        width: calc(100% - 40px);
+        margin-left: 20px;
+    }
+
+    .loginContainer h2,
+    .buttonRow {
+        margin-left: 20px;
+    }
+
+    .buttonRow {
+        flex-wrap: wrap;
+    }
+}

@@ -1,0 +1,23 @@
+__pycache__
+*.pyc
+*.pyo
+*.pyd
+.Python
+env/
+venv/
+.git
+.gitignore
+
+# 忽略数据库文件
+*.db
+dao/db/*.db
+
+# 忽略日志
+*.log
+
+# 忽略媒体文件（避免打包进镜像，应该使用挂载）
+*.mp3
+*.flac
+*.wav
+server/uploads/*
+!server/uploads/.gitkeep

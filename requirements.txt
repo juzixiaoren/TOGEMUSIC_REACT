@@ -1,0 +1,11 @@
+flask
+flask-cors
+flask-socketio
+bcrypt
+mutagen
+werkzeug
+python-socketio
+PyJWT
+redis
+flask_apscheduler
+eventlet
