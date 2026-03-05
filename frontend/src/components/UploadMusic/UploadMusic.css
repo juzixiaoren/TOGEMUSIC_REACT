@@ -1,0 +1,150 @@
+.upload-music-page {
+    width: 100%;
+    display: flex;
+    flex-direction: column;
+    gap: 16px;
+}
+
+.upload-music-page h2 {
+    margin: 0;
+    font-size: 24px;
+    color: #333;
+}
+
+.upload-dropzone {
+    border: 2px dashed #c7cdf8;
+    background: #ffffff;
+    border-radius: 16px;
+    padding: 26px 20px;
+    text-align: center;
+    box-shadow: 0 10px 30px rgba(0, 0, 0, 0.12);
+}
+
+.upload-dropzone-tip {
+    margin: 10px 0 0;
+    color: #888;
+    font-size: 13px;
+}
+
+.upload-primary-btn {
+    border: none;
+    border-radius: 10px;
+    padding: 10px 18px;
+    color: #fff;
+    cursor: pointer;
+    background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+    font-weight: 600;
+}
+
+.upload-primary-btn:disabled {
+    opacity: 0.6;
+    cursor: not-allowed;
+}
+
+.upload-file-list {
+    background: #ffffff;
+    border-radius: 16px;
+    padding: 18px;
+    box-shadow: 0 10px 30px rgba(0, 0, 0, 0.12);
+    display: flex;
+    flex-direction: column;
+    gap: 14px;
+}
+
+.upload-file-list h3 {
+    margin: 0;
+    color: #333;
+}
+
+.upload-table-wrap {
+    overflow-x: auto;
+}
+
+.upload-table {
+    width: 100%;
+    border-collapse: collapse;
+    min-width: 980px;
+}
+
+.upload-table th,
+.upload-table td {
+    border: 1px solid #ebeef5;
+    padding: 10px;
+    text-align: left;
+    font-size: 13px;
+    color: #444;
+    vertical-align: middle;
+}
+
+.upload-table thead th {
+    background: #f6f7ff;
+}
+
+.upload-table input {
+    width: 100%;
+    border: 1px solid #d7dbef;
+    border-radius: 8px;
+    padding: 8px 10px;
+    font-size: 13px;
+    outline: none;
+}
+
+.upload-progress-bar {
+    position: relative;
+    height: 22px;
+    min-width: 150px;
+    background: #eef0f7;
+    border-radius: 20px;
+    overflow: hidden;
+}
+
+.upload-progress-fill {
+    height: 100%;
+    background: linear-gradient(90deg, #667eea 0%, #764ba2 100%);
+    transition: width 0.25s ease;
+}
+
+.upload-progress-text {
+    position: absolute;
+    inset: 0;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 12px;
+    font-weight: 600;
+    color: #2f3556;
+}
+
+.upload-status-uploading {
+    color: #ff9800;
+    font-weight: 700;
+}
+
+.upload-status-success {
+    color: #4caf50;
+    font-weight: 700;
+}
+
+.upload-status-error {
+    color: #f44336;
+    font-weight: 700;
+}
+
+.upload-actions-row {
+    display: flex;
+    gap: 8px;
+}
+
+.upload-secondary-btn {
+    border: 1px solid #d0d5ec;
+    background: #fff;
+    border-radius: 8px;
+    padding: 6px 10px;
+    color: #5a628a;
+    cursor: pointer;
+}
+
+.upload-secondary-btn:disabled {
+    opacity: 0.6;
+    cursor: not-allowed;
+}

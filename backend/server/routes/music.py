@@ -584,12 +584,29 @@ def get_users():
 def get_play_status():
     status = song_model.get_play_status()
     server_now = int(time.time() * 1000)
-    status = {
-        'play_start_time': status["play_start_time"],
-        'is_playing': status["is_playing"],
-        'server_now': server_now
+    
+    # 获取当前歌曲的完整信息
+    current_song = None
+    if status and status["song_id"]:
+        song = song_model.get_song_by_id(status["song_id"])
+        if song:
+            current_song = {
+                'id': song['id'],
+                'title': song['title'],
+                'artist': song['artist'],
+                'duration': song['duration'],
+                'file_extension': song['file_extension'],
+                'file_path': song['file_path'],
+                'uploader_id': song['uploader_id']
+            }
+    
+    result = {
+        'play_start_time': status["play_start_time"] if status else None,
+        'is_playing': status["is_playing"] if status else 0,
+        'server_now': server_now,
+        'current_song': current_song
     }
-    return jsonify(status), 200
+    return jsonify(result), 200
 @music_bp.route('/getplaysongs', methods=['GET'])
 def get_play_songs():
     songs=playlist_model.get_playlist_songs(1)

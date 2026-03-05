@@ -62,9 +62,7 @@ export default function LoginContainer({ toggleView }: { toggleView: () => void 
                 localStorage.setItem("userId", userId);
                 localStorage.setItem("token", response.data.token);
                 localStorage.setItem("role", response.data.role);
-                setTimeout(() => {
-                    navigate("/home");
-                }, 2000);
+                navigate('/home');
             }
             else {
                 setMessage(response.data.message || "登录失败，请检查用户名和密码", "error");

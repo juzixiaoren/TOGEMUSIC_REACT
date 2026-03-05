@@ -12,9 +12,11 @@
   "dependencies": {
     "@arco-design/web-react": "^2.66.10",
     "axios": "^1.13.6",
+    "music-metadata-browser": "^2.5.11",
     "react": "^19.2.0",
     "react-dom": "^19.2.0",
-    "react-router-dom": "^7.13.1"
+    "react-router-dom": "^7.13.1",
+    "socket.io-client": "^4.8.3"
   },
   "devDependencies": {
     "@eslint/js": "^9.39.1",

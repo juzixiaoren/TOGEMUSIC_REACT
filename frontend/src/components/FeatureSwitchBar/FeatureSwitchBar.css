@@ -1,0 +1,37 @@
+.feature-switch-bar {
+    width: min(780px, 92%);
+    min-height: 68px;
+    margin: 0 auto;
+    padding: 10px;
+    border-radius: 999px;
+    background-color: rgba(0, 0, 0, 0.1);
+    border: 3px solid rgba(255, 255, 255, 0.35);
+    backdrop-filter: blur(12px);
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 8px;
+}
+
+.feature-switch-button {
+    flex: 1;
+    min-height: 48px;
+    border: none;
+    border-radius: 999px;
+    background: rgba(255, 255, 255, 0);
+    color: #23a30d;
+    font-family: 'MCFont';
+    font-size: 1rem;
+    font-weight: 700;
+    cursor: pointer;
+    transition: all 220ms ease;
+}
+
+.feature-switch-button:hover {
+    background-color: rgba(255, 255, 255, 0.26);
+}
+
+.feature-switch-button.active {
+    background-color: rgba(255, 255, 255, 0.48);
+    box-shadow: 0 0 10px rgba(255, 255, 255, 0.2);
+}

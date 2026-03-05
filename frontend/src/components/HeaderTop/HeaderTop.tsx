@@ -19,7 +19,7 @@ export default function HeaderTop({ isLogin, userId }: HeaderTopProps) {
     else {
         return (
             <div className="top">
-                <div className="title">
+                <div className="titleaftl">
                     <h1>TOGEMUSIC</h1>
                     <div className="welcome">
                         <h2>欢迎，{userId}</h2>

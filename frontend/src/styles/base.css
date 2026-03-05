@@ -1,26 +1,3 @@
-.background {
-
-    min-width: 100vw;
-    min-height: 100vh;
-    background-image: linear-gradient(90deg, rgba(255, 255, 255, 0.548), rgba(182, 181, 181, 0)), url('../../dist/assets/终末地视频帧-_sx5INNN.jpg');
-    background-size: cover;
-    background-position: center;
-    background-repeat: no-repeat;
-    background-attachment: fixed;
-}
-
-#container {
-    background-image: linear-gradient(90deg, rgba(0, 0, 0, 0.7), rgba(0, 0, 0, 0.1)), url('/src/assets/images/终末地视频帧.png');
-    background-size: cover;
-    /* 确保背景图覆盖整个容器 */
-    background-position: center;
-    /* 居中显示背景图 */
-    overflow: hidden;
-    /* 隐藏溢出部分 */
-}
-
-
-
 .content {
 
     position: relative;
@@ -31,8 +8,6 @@
     flex-direction: column;
     align-items: center;
     justify-content: center;
-    height: calc(100vh - 150px);
-    /* 减去头部高度 */
     width: 90%;
 
 }

@@ -4,3 +4,7 @@ export type HeaderTopProps = {
     isLogin: boolean;
     userId?: string;
 }
+export type CoverImageProps = {
+    src: string;
+    alt: string;
+}

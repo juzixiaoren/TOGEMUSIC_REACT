@@ -1,10 +1,11 @@
-import LoginPage from './pages/LoginPage/LoginPage'
 import { MessageProvider } from './context/MessageContext'
+import { RouterProvider } from 'react-router-dom'
+import { router } from './router/routes'
 function App() {
   return (
     <main>
       <MessageProvider>
-        <LoginPage />
+        <RouterProvider router={router} />
       </MessageProvider>
     </main>
   )

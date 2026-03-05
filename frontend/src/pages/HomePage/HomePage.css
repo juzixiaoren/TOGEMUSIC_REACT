@@ -1,0 +1,21 @@
+.home-content {
+    justify-content: flex-start;
+}
+
+.feature-switch-wrap {
+    width: 100%;
+    margin-top: 40px;
+}
+
+.home-feature-panel {
+    width: min(1100px, 92%);
+    min-height: 280px;
+    padding: 28px;
+    border-radius: 24px;
+    color: #262626;
+    font-family: 'MCFont';
+}
+
+.home-feature-panel h2 {
+    margin: 0 0 14px 0;
+}

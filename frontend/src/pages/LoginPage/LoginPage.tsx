@@ -10,7 +10,7 @@ export default function LoginPage() {
         setIsLoginVisible(!isLoginVisible);
     };
     return (
-        <div className="background">
+        <div>
             <HeaderTop isLogin={false} />
             <div className='content'>
                 <div id="loginContent" className="glass">

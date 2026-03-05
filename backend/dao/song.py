@@ -38,8 +38,11 @@ class Song:
         self.commit()
     def get_play_status(self):
         cursor = self.execute("""
-                            SELECT play_start_time ,is_playing
-                            FROM room_play_state LIMIT 1
+                            SELECT play_start_time ,is_playing,song_id
+                            FROM room_play_state AS rps
+                            JOIN playlist_songs AS ps ON rps.room_id = ps.playlist_id
+                            WHERE rps.room_id = 1 AND ps.order_index = 1
+                            LIMIT 1
                             """)
         return cursor.fetchone()
     def set_play_status(self, play_start_time, is_playing):

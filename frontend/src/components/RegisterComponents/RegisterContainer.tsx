@@ -75,9 +75,7 @@ export default function RegisterContainer({ toggleView }: { toggleView: () => vo
             });
             if (response.data.success) {
                 setMessage("注册成功，请登录", "success");
-                setTimeout(() => {
-                    toggleView();
-                }, 2000);
+                toggleView();
             }
             else {
                 setMessage(response.data.message || "注册失败，请稍后重试", "error");

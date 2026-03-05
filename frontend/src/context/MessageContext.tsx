@@ -17,6 +17,9 @@ export const MessageProvider = ({ children }: { children: ReactNode }) => {
     const [messageState, setMessageState] = useState<{ message: string, type: MessageType }>({ message: "", type: "success" });
     const setMessage = (message: string, type: MessageType) => {
         setMessageState({ message, type });
+        setTimeout(() => {
+            setMessageState({ message: "", type: "success" });
+        }, 3000);
     };
     return (
         <MessageContext.Provider value={{ setMessage }}>

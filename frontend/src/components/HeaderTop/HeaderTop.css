@@ -31,6 +31,19 @@
     margin-bottom: -10px;
 }
 
+.titleaftl {
+    width: 100%;
+
+
+    position: absolute;
+    bottom: 0;
+
+    font-family: 'MCFont';
+    color: rgb(44, 44, 44);
+    margin-left: 50px;
+}
+
+
 .logo {
     position: absolute;
     bottom: 0;
