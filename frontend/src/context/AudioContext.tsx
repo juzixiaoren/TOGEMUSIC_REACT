@@ -1,6 +1,7 @@
 import { createContext, useContext, useState, useCallback, useRef, useEffect } from "react";
 import type { ReactNode } from "react";
 import { useMessage } from "./MessageContext";
+import { useSocket } from "./SocketContext";
 import type { Song } from '../components/PlayerPage/types';
 
 export interface AudioContextType {
@@ -12,6 +13,9 @@ export interface AudioContextType {
     stopPlayback: () => void;
     handleSetVolume: (newVolume: number) => void;
     setOnEndedCallback: (callback: (() => void) | null) => void;
+    nextSong: () => void;
+    prevSong: () => void;
+    shufflePlaylist: () => void;
 }
 
 const AudioContext = createContext<AudioContextType | undefined>(undefined);
@@ -36,6 +40,11 @@ export const AudioProvider = ({ children }: { children: ReactNode }) => {
     const isInitializingRef = useRef(false);
 
     const { setMessage } = useMessage();
+    const {
+        emitRequestNextSong,
+        emitRequestPrevSong,
+        emitRequestShuffle
+    } = useSocket();
 
     const setOnEndedCallback = useCallback((callback: (() => void) | null) => {
         onEndedCallbackRef.current = callback;
@@ -157,6 +166,65 @@ export const AudioProvider = ({ children }: { children: ReactNode }) => {
         }
     }, [cleanupAudio, setMessage, startTimeUpdate, stopTimeUpdate, volume]);
 
+    // 切歌功能（通过 Socket）
+    const nextSong = useCallback(() => {
+        emitRequestNextSong((response) => {
+            if (response?.success) {
+                setMessage('切换到下一首', 'success');
+            }
+        });
+    }, [emitRequestNextSong, setMessage]);
+
+    const prevSong = useCallback(() => {
+        emitRequestPrevSong((response) => {
+            if (response?.success) {
+                setMessage('切换到上一首', 'success');
+            }
+        });
+    }, [emitRequestPrevSong, setMessage]);
+
+    const shufflePlaylist = useCallback(() => {
+        emitRequestShuffle((response) => {
+            if (response?.success) {
+                setMessage('播放列表已打乱', 'success');
+            }
+        });
+    }, [emitRequestShuffle, setMessage]);
+
+    // 全局键盘快捷键监听（切歌/随机播放）
+    useEffect(() => {
+        const handleKeyDown = (event: KeyboardEvent) => {
+            const activeTag = (document.activeElement?.tagName || '').toLowerCase();
+            const isTyping = activeTag === 'input' || activeTag === 'textarea' || document.activeElement?.getAttribute('contenteditable') === 'true';
+            if (isTyping) {
+                return;
+            }
+
+            // PageDown 或小键盘 2：下一首
+            if (event.key === 'PageDown' || event.code === 'Numpad2') {
+                event.preventDefault();
+                nextSong();
+            }
+
+            // PageUp 或小键盘 8：上一首
+            if (event.key === 'PageUp' || event.code === 'Numpad8') {
+                event.preventDefault();
+                prevSong();
+            }
+
+            // 小键盘 5（Numpad5）：随机播放
+            if (event.code === 'Numpad5') {
+                event.preventDefault();
+                shufflePlaylist();
+            }
+        };
+
+        window.addEventListener('keydown', handleKeyDown);
+        return () => {
+            window.removeEventListener('keydown', handleKeyDown);
+        };
+    }, [nextSong, prevSong, shufflePlaylist]);
+
     // 组件卸载时清理
     useEffect(() => {
         return () => {
@@ -173,7 +241,10 @@ export const AudioProvider = ({ children }: { children: ReactNode }) => {
             playSong,
             stopPlayback,
             handleSetVolume,
-            setOnEndedCallback
+            setOnEndedCallback,
+            nextSong,
+            prevSong,
+            shufflePlaylist
         }}>
             {children}
         </AudioContext.Provider>

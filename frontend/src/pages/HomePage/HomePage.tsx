@@ -42,7 +42,10 @@ export default function HomePage() {
                         <div className="home-feature-panel glass">
                             {activeFeature === 'upload' && <UploadMusic />}
                             {activeFeature === 'playlist' && <PlaylistManager />}
-                            {activeFeature === 'player' && <PlayerPage />}
+                            {/* PlayerPage 始终挂载以保持 Socket 事件监听，切歌才能同步 */}
+                            <div style={{ display: activeFeature === 'player' ? 'contents' : 'none' }}>
+                                <PlayerPage />
+                            </div>
                         </div>
                     </AudioProvider>
                 </SocketProvider>

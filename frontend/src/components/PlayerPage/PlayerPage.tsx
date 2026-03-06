@@ -21,13 +21,13 @@ export default function PlayerPage() {
         playSong,
         stopPlayback,
         handleSetVolume,
-        setOnEndedCallback
+        setOnEndedCallback,
+        nextSong,
+        prevSong,
+        shufflePlaylist
     } = useAudio();
     const {
         emitSongEnded,
-        emitRequestNextSong,
-        emitRequestPrevSong,
-        emitRequestShuffle,
         registerEventHandlers,
         unregisterEventHandlers
     } = useSocket();
@@ -213,33 +213,6 @@ export default function PlayerPage() {
         }
     }, [authHeader, setMessage]);
 
-    // 切换下一首（通过 Socket）
-    const nextSong = useCallback(() => {
-        emitRequestNextSong((response) => {
-            if (response?.success) {
-                setMessage('切换到下一首歌成功', 'success');
-            }
-        });
-    }, [emitRequestNextSong, setMessage]);
-
-    // 切换上一首（通过 Socket）
-    const prevSong = useCallback(() => {
-        emitRequestPrevSong((response) => {
-            if (response?.success) {
-                setMessage('切换到上一首歌成功', 'success');
-            }
-        });
-    }, [emitRequestPrevSong, setMessage]);
-
-    // 随机播放（通过 Socket）
-    const requestShuffle = useCallback(() => {
-        emitRequestShuffle((response) => {
-            if (response?.success) {
-                setMessage('播放列表已打乱', 'success');
-            }
-        });
-    }, [emitRequestShuffle, setMessage]);
-
     // 展开/收起歌单
     const togglePlaylistExpand = useCallback(async (playlistId: number) => {
         if (expandedPlaylist === playlistId) {
@@ -323,12 +296,14 @@ export default function PlayerPage() {
                 const serverNow = status['server_now'] as number;
                 const startTime = new Date(status['play_start_time'] as string).getTime();
                 const offset = Math.max(0, Math.floor((serverNow - startTime) / 1000));
+                console.log(`本地播放进度: ${currentTime}s, 服务器播放进度: ${offset}s, 需要同步`);
 
                 console.log(`同步播放进度: offset=${offset}s`);
 
                 const song = status.current_song as Song;
                 await playWithOffset(song, offset);
                 setMessage('已同步播放状态', 'success');
+
             } else {
                 console.log('服务器未在播放');
             }
@@ -468,12 +443,6 @@ export default function PlayerPage() {
         });
     }, []);
 
-    // 组件卸载时清理
-    useEffect(() => {
-        return () => {
-            stopPlayback();
-        };
-    }, [stopPlayback]);
 
     return (
         <>
@@ -488,7 +457,7 @@ export default function PlayerPage() {
                     formatTime={formatTime}
                     onPrevSong={prevSong}
                     onNextSong={nextSong}
-                    onShuffle={requestShuffle}
+                    onShuffle={shufflePlaylist}
                     onOpenImportDialog={() => setShowSelectDialog(true)}
                     onVolumeChange={handleSetVolume}
                     onCoverLoadFailed={() => setCurrentSongCoverUrl(null)}
@@ -497,6 +466,7 @@ export default function PlayerPage() {
                     displayPlaylist={displayPlaylist}
                     currentSongId={currentSong?.id ?? null}
                     formatTime={formatTime}
+                    onStopPlay={() => { void stopPlayback(); }}
                     onPlay={() => { void startPlay(); }}
                     onClear={() => { void clearPlaylist(); }}
                     onDeleteSong={(songId) => { void deleteSong(songId); }}

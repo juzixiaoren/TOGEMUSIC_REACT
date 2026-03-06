@@ -6,6 +6,7 @@ type PlaylistPanelProps = {
     currentSongId: number | null;
     formatTime: (time: number) => string;
     onPlay: () => void;
+    onStopPlay: () => void;
     onClear: () => void;
     onDeleteSong: (songId: number) => void;
     onDragStart: (index: number) => void;
@@ -19,6 +20,7 @@ export default function PlaylistPanel({
     currentSongId,
     formatTime,
     onPlay,
+    onStopPlay,
     onClear,
     onDeleteSong,
     onDragStart,
@@ -31,6 +33,7 @@ export default function PlaylistPanel({
             <div className="playlist-header">
                 <h2>播放列表</h2>
                 <div className="playlist-actions">
+                    <button type="button" onClick={onStopPlay} className="action-btn" title="暂停播放">|| 暂停</button>
                     <button type="button" onClick={onPlay} className="action-btn" title="开始播放">▶ 播放</button>
                     <button type="button" onClick={onClear} className="action-btn" title="清空列表">🗑 清空</button>
                 </div>
