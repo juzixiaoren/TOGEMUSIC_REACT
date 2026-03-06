@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import HeaderTop from '../../components/HeaderTop/HeaderTop';
 import { useNavigate } from 'react-router-dom';
 import { useMessage } from '../../context/MessageContext';
@@ -14,25 +14,25 @@ export default function HomePage() {
     const navigate = useNavigate();
     const setMessage = useMessage().setMessage;
     const [activeFeature, setActiveFeature] = useState<FeatureKey>('upload');
-    const validateLogin = () => {
-        const userId = localStorage.getItem('userId');
-        const token = localStorage.getItem('token');
+    const userId = localStorage.getItem('userId') || "";
+    const token = localStorage.getItem('token');
+    const isLoggedIn = Boolean(userId && token);
 
-        if (!userId || !token) {
-            setMessage("请重新登录", "error");
+    useEffect(() => {
+        if (!isLoggedIn) {
+            setMessage('请重新登录', 'error');
             localStorage.clear();
-            navigate('/login');
-            return null;
+            navigate('/login', { replace: true });
         }
+    }, [isLoggedIn, navigate, setMessage]);
 
-        return { userId, token };
-    };
-    const loginInfo = validateLogin();
-    const userId = loginInfo?.userId;
+    if (!isLoggedIn) {
+        return null;
+    }
 
     return (
         <div>
-            <HeaderTop isLogin={true} userId={userId} />
+            <HeaderTop isLogin={true} userId={userId ?? undefined} />
             <div className='content home-content'>
                 <div className="feature-switch-wrap">
                     <FeatureSwitchBar selectedKey={activeFeature} onChange={setActiveFeature} />

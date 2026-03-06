@@ -1,6 +1,13 @@
 import './HeaderTop.css'
 import type { HeaderTopProps } from '../../types/alltypes'
+import { useNavigate } from 'react-router-dom'
 export default function HeaderTop({ isLogin, userId }: HeaderTopProps) {
+    const navigate = useNavigate();
+    const onLoginOut = () => {
+        window.dispatchEvent(new Event('app:logout'));
+        localStorage.clear();
+        navigate('/login', { replace: true });
+    }
     if (!isLogin) {
         return (
             <div className="top">
@@ -8,10 +15,10 @@ export default function HeaderTop({ isLogin, userId }: HeaderTopProps) {
                     <h1>TOGEMUSIC</h1>
                 </div>
                 <div className="logo">
-                    <img id="logo" src="/src/assets/images/logo.png" alt="logo" height="200px"></img>
+                    <img id="logo" src="/logo.jpg" alt="logo" height="200px"></img>
                 </div>
                 <div className="amiya">
-                    <img src="/src/assets/images/amiya.gif" alt="阿米娅" height="200px" id="amiyaimg"></img>
+                    <img src="/amiya.gif" alt="阿米娅" height="200px" id="amiyaimg"></img>
                 </div>
             </div>
         )
@@ -23,11 +30,14 @@ export default function HeaderTop({ isLogin, userId }: HeaderTopProps) {
                     <h1>TOGEMUSIC</h1>
                     <div className="welcome">
                         <h2>欢迎，{userId}</h2>
-                        <button onClick={() => { }}>退出登录</button>
+                        <button onClick={onLoginOut}>退出登录</button>
                     </div>
                 </div>
+                <div className="logo">
+                    <img id="logo" src="/logo.jpg" alt="logo" height="200px"></img>
+                </div>
                 <div className="amiya">
-                    <img src="/src/assets/images/amiya.gif" alt="阿米娅" height="200px" id="amiyaimg"></img>
+                    <img src="/amiya.gif" alt="阿米娅" height="200px" id="amiyaimg"></img>
                 </div>
             </div >
         )

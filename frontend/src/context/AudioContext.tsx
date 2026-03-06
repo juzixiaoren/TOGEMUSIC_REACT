@@ -107,7 +107,7 @@ export const AudioProvider = ({ children }: { children: ReactNode }) => {
             isInitializingRef.current = true;
             cleanupAudio();
 
-            const audio = new Audio(`/songs/${song.id}/file.${song.file_extension}`);
+            const audio = new Audio(`/api/songs/${song.id}/file.${song.file_extension}`);
             audio.preload = 'metadata';
             audio.volume = volume / 100;
 
@@ -229,6 +229,19 @@ export const AudioProvider = ({ children }: { children: ReactNode }) => {
     useEffect(() => {
         return () => {
             cleanupAudio();
+        };
+    }, [cleanupAudio]);
+
+    // 登出时强制停止播放（避免路由切换竞态导致音频残留）
+    useEffect(() => {
+        const handleLogout = () => {
+            cleanupAudio();
+            setCurrentSongId(null);
+        };
+
+        window.addEventListener('app:logout', handleLogout);
+        return () => {
+            window.removeEventListener('app:logout', handleLogout);
         };
     }, [cleanupAudio]);
 

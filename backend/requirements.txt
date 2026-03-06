@@ -1,6 +1,9 @@
 flask
 flask-cors
 flask-socketio
+gunicorn
+gevent
+gevent-websocket
 bcrypt
 mutagen
 werkzeug
@@ -9,4 +12,3 @@ PyJWT
 redis
 flask_apscheduler
 python-dotenv
-eventlet

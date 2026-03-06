@@ -194,8 +194,17 @@
     min-width: 240px;
 }
 
+.song-pick-check-box {
+    width: 16px;
+    height: 16px;
+    border: 1px solid #d9ddef;
+    border-radius: 4px;
+    cursor: pointer;
+}
+
 .song-pick-list {
     flex: 1;
+    min-height: 0;
     overflow: auto;
     border: 1px solid #eceffd;
     border-radius: 10px;
@@ -219,10 +228,18 @@
 
 .source-playlist-list {
     flex: 1;
+    min-height: 0;
     overflow: auto;
     display: flex;
     flex-direction: column;
     gap: 8px;
+}
+
+.song-picker-check-box {
+    width: 16px;
+    height: 16px;
+    accent-color: #667eea;
+    margin: 10px;
 }
 
 .source-playlist-item {
@@ -258,6 +275,7 @@
 
 .playlist-dialog-footer {
     display: flex;
+    flex-shrink: 0;
     justify-content: space-between;
     align-items: center;
     border-top: 1px solid #eceffd;

@@ -133,7 +133,7 @@ export default function UploadMusic() {
         formData.append('chunk', chunk);
 
         try {
-            await axios.post('/uploadchunk', formData, {
+            await axios.post('uploadchunk', formData, {
                 headers: {
                     ...authHeader,
                     'Content-Type': 'multipart/form-data'

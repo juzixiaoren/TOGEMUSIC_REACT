@@ -6,6 +6,7 @@ from dao.user import User
 from utils.song_scheduler import song_scheduler
 import os
 import time
+import json
 import mimetypes
 import shutil
 import subprocess
@@ -35,6 +36,59 @@ os.makedirs(CHUNK_TEMP_DIR, exist_ok=True)
 # 上传会话映射表：存储每个上传会话的元数据
 UPLOAD_SESSIONS = {}
 FLAC_BLOCK_SIZE = 4096
+
+
+def _session_meta_path(session_id: str) -> str:
+    return os.path.join(CHUNK_TEMP_DIR, f'{session_id}.json')
+
+
+def _save_upload_session(session_id: str, session: dict):
+    payload = dict(session)
+    payload['uploaded_chunks'] = sorted(list(payload.get('uploaded_chunks', set())))
+    meta_path = _session_meta_path(session_id)
+    temp_meta_path = f'{meta_path}.tmp'
+    with open(temp_meta_path, 'w', encoding='utf-8') as fp:
+        json.dump(payload, fp, ensure_ascii=False)
+    os.replace(temp_meta_path, meta_path)
+
+
+def _load_upload_session(session_id: str):
+    if session_id in UPLOAD_SESSIONS:
+        return UPLOAD_SESSIONS[session_id]
+
+    meta_path = _session_meta_path(session_id)
+    if not os.path.exists(meta_path):
+        return None
+
+    try:
+        with open(meta_path, 'r', encoding='utf-8') as fp:
+            session = json.load(fp)
+        session['uploaded_chunks'] = set(session.get('uploaded_chunks', []))
+        UPLOAD_SESSIONS[session_id] = session
+        return session
+    except Exception:
+        return None
+
+
+def _clear_upload_session(session_id: str):
+    UPLOAD_SESSIONS.pop(session_id, None)
+    meta_path = _session_meta_path(session_id)
+    if os.path.exists(meta_path):
+        os.remove(meta_path)
+
+
+def _get_uploaded_chunk_indices(session_dir: str):
+    indices = set()
+    if not os.path.isdir(session_dir):
+        return indices
+
+    for entry in os.listdir(session_dir):
+        if not entry.startswith('chunk_'):
+            continue
+        suffix = entry[len('chunk_'):]
+        if suffix.isdigit():
+            indices.add(int(suffix))
+    return indices
 
 def _optimize_flac_file(file_path: str):
     """
@@ -447,12 +501,25 @@ def init_chunk_upload():
         return jsonify({'message': 'Invalid token'}), 401
     
     data = request.get_json()
+    if not data:
+        return jsonify({'message': 'Invalid request body'}), 400
+
     filename = data.get('filename')
     total_chunks = data.get('totalChunks')
     file_size = data.get('fileSize')
     title = data.get('title')
     artist = data.get('artist')
     duration = data.get('duration')
+
+    try:
+        total_chunks = int(total_chunks)
+        file_size = int(file_size)
+        duration = int(duration)
+    except (TypeError, ValueError):
+        return jsonify({'message': 'Invalid chunk init params'}), 400
+
+    if not filename or total_chunks <= 0 or file_size <= 0:
+        return jsonify({'message': 'Invalid chunk init params'}), 400
     
     # 生成唯一的会话 ID
     session_id = str(uuid.uuid4())
@@ -474,6 +541,7 @@ def init_chunk_upload():
         'uploaded_chunks': set(),
         'created_at': time.time()
     }
+    _save_upload_session(session_id, UPLOAD_SESSIONS[session_id])
     
     print(f"初始化上传会话：{session_id}，总分片数：{total_chunks}")
     return jsonify({'sessionId': session_id}), 200
@@ -487,26 +555,43 @@ def upload_chunk():
     if not user_id:
         return jsonify({'message': 'Invalid token'}), 401
     
-    session_id = request.form.get('sessionId')
-    chunk_index = int(request.form.get('chunkIndex'))
-    total_chunks = int(request.form.get('totalChunks'))
+    session_id = (request.form.get('sessionId') or '').strip()
+    chunk_index_raw = request.form.get('chunkIndex')
+    total_chunks_raw = request.form.get('totalChunks')
     chunk_file = request.files.get('chunk')
-    
-    if not chunk_file or session_id not in UPLOAD_SESSIONS:
+
+    if not chunk_file or not session_id or chunk_index_raw is None or total_chunks_raw is None:
         return jsonify({'message': 'Invalid request'}), 400
-    
-    session = UPLOAD_SESSIONS[session_id]
+
+    try:
+        chunk_index = int(chunk_index_raw)
+        total_chunks = int(total_chunks_raw)
+    except (TypeError, ValueError):
+        return jsonify({'message': 'Invalid chunk params'}), 400
+
+    session = _load_upload_session(session_id)
+    if not session:
+        return jsonify({'message': 'Invalid session'}), 400
+
     if session['user_id'] != user_id:
         return jsonify({'message': 'Unauthorized'}), 403
+
+    expected_chunks = int(session['total_chunks'])
+    if total_chunks != expected_chunks or chunk_index < 0 or chunk_index >= expected_chunks:
+        return jsonify({'message': 'Chunk index out of range'}), 400
     
     # 保存分片到临时目录
     chunk_path = os.path.join(session['session_dir'], f'chunk_{chunk_index}')
     chunk_file.save(chunk_path)
-    
+
     # 记录已上传的分片
     session['uploaded_chunks'].add(chunk_index)
-    
-    print(f"已接收分片 {chunk_index}/{total_chunks}，会话 {session_id}，已完成 {len(session['uploaded_chunks'])}/{total_chunks}")
+
+    # 进程内状态仅用于日志与快速读取；真实一致性依赖磁盘元数据与分片文件
+    _save_upload_session(session_id, session)
+    uploaded_count = len(_get_uploaded_chunk_indices(session['session_dir']))
+
+    print(f"已接收分片 {chunk_index + 1}/{total_chunks}，会话 {session_id}，已完成 {uploaded_count}/{total_chunks}")
     
     return jsonify({'message': 'Chunk uploaded'}), 200
 
@@ -520,20 +605,24 @@ def merge_chunks():
         return jsonify({'message': 'Invalid token'}), 401
     
     data = request.get_json()
-    session_id = data.get('sessionId')
-    
-    if session_id not in UPLOAD_SESSIONS:
+    if not data:
+        return jsonify({'message': 'Invalid request body'}), 400
+
+    session_id = (data.get('sessionId') or '').strip()
+
+    session = _load_upload_session(session_id)
+    if not session:
         return jsonify({'message': 'Invalid session'}), 400
-    
-    session = UPLOAD_SESSIONS[session_id]
+
     if session['user_id'] != user_id:
         return jsonify({'message': 'Unauthorized'}), 403
-    
+
     # 验证所有分片是否已上传
-    uploaded_count = len(session['uploaded_chunks'])
-    expected_count = session['total_chunks']
+    expected_count = int(session['total_chunks'])
+    uploaded_chunks = _get_uploaded_chunk_indices(session['session_dir'])
+    uploaded_count = len(uploaded_chunks)
     if uploaded_count != expected_count:
-        missing_chunks = [i for i in range(expected_count) if i not in session['uploaded_chunks']]
+        missing_chunks = [i for i in range(expected_count) if i not in uploaded_chunks]
         print(f"❌ 合并失败：会话 {session_id} 只收到 {uploaded_count}/{expected_count} 个分片，缺少：{missing_chunks}")
         return jsonify({
             'message': f'Not all chunks uploaded: {uploaded_count}/{expected_count}',
@@ -566,7 +655,7 @@ def merge_chunks():
         
         # 清理临时目录
         shutil.rmtree(session['session_dir'])
-        del UPLOAD_SESSIONS[session_id]
+        _clear_upload_session(session_id)
         
         print(f"成功合并文件：{session['filename']}")
         return jsonify({'message': 'File merged successfully'}), 200

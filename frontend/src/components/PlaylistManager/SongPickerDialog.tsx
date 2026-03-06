@@ -40,13 +40,13 @@ function formatTime(duration: number) {
     return `${mins}:${secs.toString().padStart(2, '0')}`;
 }
 
-function filterAndSortSongs(songs: Song[], searchQuery: string, filterUser: string, sortBy: SortBy) {
+function filterAndSortSongs(songs: Song[], searchQuery: string, filterUser: string, sortBy: SortBy) {// 过滤
     const q = searchQuery.trim().toLowerCase();
     const filtered = songs.filter((song) => {
         const matchSearch =
             !q || song.title.toLowerCase().includes(q) || song.artist.toLowerCase().includes(q);
         const matchUser = !filterUser || String(song.uploader_id) === filterUser;
-        return matchSearch && matchUser;
+        return matchSearch && matchUser;// 只有同时满足搜索和用户过滤条件的歌曲才会被保留
     });
 
     return filtered.sort((left, right) => {
@@ -59,7 +59,7 @@ function filterAndSortSongs(songs: Song[], searchQuery: string, filterUser: stri
         if (sortBy === 'duration') {
             return (right.duration || 0) - (left.duration || 0);
         }
-        return new Date(right.time_added).getTime() - new Date(left.time_added).getTime();
+        return new Date(right.time_added).getTime() - new Date(left.time_added).getTime();// 默认按照添加时间排序，时间新的在前面
     });
 }
 
@@ -99,6 +99,13 @@ export default function SongPickerDialog(props: SongPickerDialogProps) {
     }
 
     const filteredAllSongs = filterAndSortSongs(allSongs, searchQuery, filterUser, sortBy);
+    const onSelectAll = () => {
+        const songs = filterAndSortSongs(allSongs, searchQuery, filterUser, sortBy);
+        const allIds = songs.map((song) => song.id);
+        allIds.map((id) => onToggleSong(id, true));
+    };
+
+
 
     return (
         <div className="playlist-dialog-overlay" role="dialog" aria-modal="true" aria-label={title}>
@@ -162,6 +169,7 @@ export default function SongPickerDialog(props: SongPickerDialogProps) {
                                         type="checkbox"
                                         checked={selectedSongIds.includes(song.id)}
                                         onChange={(event) => onToggleSong(song.id, event.target.checked)}
+                                        className="song-picker-check-box"
                                     />
                                     <span>{song.title} - {song.artist} ({formatTime(song.duration)})</span>
                                 </label>
@@ -189,6 +197,7 @@ export default function SongPickerDialog(props: SongPickerDialogProps) {
                                                 type="checkbox"
                                                 checked={selected}
                                                 onChange={(event) => onToggleSourcePlaylistSelect(playlist.id, event.target.checked)}
+                                                className="song-picker-check-box"
                                             />
                                             <span>{playlist.playlist_name}</span>
                                         </label>
@@ -211,6 +220,7 @@ export default function SongPickerDialog(props: SongPickerDialogProps) {
                                                             type="checkbox"
                                                             checked={selectedSongIds.includes(song.id)}
                                                             onChange={(event) => onToggleSong(song.id, event.target.checked)}
+                                                            className="song-picker-check-box"
                                                         />
                                                         <span>{song.title} - {song.artist} ({formatTime(song.duration)})</span>
                                                     </label>
@@ -227,6 +237,7 @@ export default function SongPickerDialog(props: SongPickerDialogProps) {
                 <div className="playlist-dialog-footer">
                     <span>已选歌曲：{selectedSongIds.length}</span>
                     <div>
+                        <button type="button" className="playlist-primary-btn" onClick={onSelectAll}>全选</button>
                         <button type="button" className="playlist-primary-btn" onClick={onConfirm}>确认</button>
                         <button type="button" className="playlist-secondary-btn" onClick={onCancel}>取消</button>
                     </div>

@@ -41,6 +41,7 @@ export default function PlayerPage() {
     const [currentSong, setCurrentSong] = useState<Song | null>(null);
     const [draggedIndex, setDraggedIndex] = useState<number | null>(null);
     const [currentSongCoverUrl, setCurrentSongCoverUrl] = useState<string | null>(null);
+    const hasInitializedRef = useRef(false);
 
     const currentSongIdRef = useRef<number | null>(null);
 
@@ -435,6 +436,10 @@ export default function PlayerPage() {
 
     // 初始加载
     useEffect(() => {
+        if (hasInitializedRef.current) {
+            return;
+        }
+        hasInitializedRef.current = true;
         void Promise.all([loadPlaylists(), loadDefaultPlaylist()]).then(() => {
             // 加载完成后检查并同步播放状态
             setTimeout(() => {

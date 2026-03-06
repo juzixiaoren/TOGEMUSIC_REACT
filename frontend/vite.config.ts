@@ -5,28 +5,23 @@ import react from '@vitejs/plugin-react'
 export default defineConfig({
   plugins: [react()],
   server: {
+    host: '127.0.0.1',
+    port: 14514,
     proxy: {
-      '/login': {
-        target: 'http://127.0.0.1:8034',
-        changeOrigin: true,
-      },
-      '/register': {
-        target: 'http://127.0.0.1:8034',
-        changeOrigin: true,
-      },
-      '/protected': {
-        target: 'http://127.0.0.1:8034',
-        changeOrigin: true,
-      },
-      '^/(songs|playlists|getAllPlaylists|upload|uploadchunkinit|uploadchunk|uploadchunkmerge|users|getplaystatus|getplaysongs|requestplay|clearplaylist|removesongfromplaylist|reorderPlaylist)(/.*)?$': {
-        target: 'http://127.0.0.1:8034',
+      '/reverse': {
+        target: 'http://localhost:8034', // 后端服务地址
         changeOrigin: true,
       },
       '/socket.io': {
-        target: 'http://127.0.0.1:8034',
+        target: 'http://localhost:8034',
         changeOrigin: true,
         ws: true,
       },
+      '/api': {
+        target: 'http://localhost:8034', // 后端服务地址
+        changeOrigin: true,
+        rewrite: (path) => path.replace(/^\/api/, ''),
+      }
     },
   },
 })

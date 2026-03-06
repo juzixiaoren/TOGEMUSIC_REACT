@@ -1,8 +1,6 @@
 import sys
 import os
 import random
-import eventlet
-eventlet.monkey_patch()
 
 # 首先设置模块搜索路径，让 Python 能找到 dao 包
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..'))
@@ -21,8 +19,16 @@ from routes.auth import auth_bp
 from routes.music import music_bp
 
 scheduler = None
+socketio_async_mode = os.getenv("SOCKETIO_ASYNC_MODE", "threading")
+socketio_message_queue = os.getenv("SOCKETIO_MESSAGE_QUEUE") or None
 # 开启 logger 和 engineio_logger 方便排查 WebSocket 400 错误
-socketio = SocketIO(logger=True, engineio_logger=True, cors_allowed_origins="*")
+socketio = SocketIO(
+    logger=True,
+    engineio_logger=True,
+    cors_allowed_origins="*",
+    async_mode=socketio_async_mode,
+    message_queue=socketio_message_queue
+)
 
 import time
 from dao.song import Song
@@ -132,17 +138,12 @@ def create_app():
     app.register_blueprint(auth_bp)
     app.register_blueprint(music_bp)
 
-    # 初始化 SocketIO
-    # 允许跨域，支持 WebSocket
-    # 强制在 init_app 中再次指定，确保覆盖
-    socketio.init_app(app, cors_allowed_origins="*")
-
     # 设置定时器的回调函数
     song_scheduler.set_callback(trigger_next_song)
 
-    # 初始化 SocketIO
+    # 初始化 SocketIO（只初始化一次，避免运行模式冲突）
     print(f"✅ SocketIO init with CORS: {cors_origins}")
-    socketio.init_app(app, cors_allowed_origins=cors_origins, async_mode='threading')
+    socketio.init_app(app, cors_allowed_origins=cors_origins)
 
     # ===== WebSocket 事件处理 =====
     @socketio.on('connect')
@@ -294,13 +295,15 @@ def create_app():
 
     return app
 
+app = create_app()
+
 if __name__ == '__main__':
-    app = create_app()
+    allow_unsafe_werkzeug = os.getenv("ALLOW_UNSAFE_WERKZEUG", "1") == "1"
     
     socketio.run(
         app,
         host=os.getenv("BACKEND_HOST", "0.0.0.0"),
         port=int(os.getenv("BACKEND_PORT", Config.SERVER_PORT)),
         debug=os.getenv("FLASK_DEBUG", "0") == "1",
-        allow_unsafe_werkzeug=True
+        allow_unsafe_werkzeug=allow_unsafe_werkzeug
     )

@@ -1,5 +1,5 @@
 import axios from 'axios';
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useMessage } from '../../context/MessageContext';
 import SongPickerDialog from './SongPickerDialog';
 import type { Playlist, Song, SortBy, User } from './types';
@@ -28,6 +28,8 @@ export default function PlaylistManager() {
     const [selectedSongIds, setSelectedSongIds] = useState<number[]>([]);
     const [selectedSourcePlaylistIds, setSelectedSourcePlaylistIds] = useState<number[]>([]);
     const [expandedSourcePlaylistIds, setExpandedSourcePlaylistIds] = useState<number[]>([]);
+    const selectedPlaylistIdRef = useRef<number | null>(null);
+    const hasInitializedRef = useRef(false);
 
     const authHeader = useMemo(
         () => ({ Authorization: localStorage.getItem('token') || '' }),
@@ -66,8 +68,9 @@ export default function PlaylistManager() {
                 setPlaylistSongs([]);
                 return list;
             }
-            const targetId = selectedPlaylistId && list.some((p) => p.id === selectedPlaylistId)
-                ? selectedPlaylistId
+            const currentSelectedId = selectedPlaylistIdRef.current;
+            const targetId = currentSelectedId && list.some((p) => p.id === currentSelectedId)
+                ? currentSelectedId
                 : list[0].id;
             await loadPlaylistDetail(targetId);
             return list;
@@ -75,7 +78,7 @@ export default function PlaylistManager() {
             setMessage('加载歌单失败', 'error');
             return [] as Playlist[];
         }
-    }, [authHeader, loadPlaylistDetail, selectedPlaylistId, setMessage]);
+    }, [authHeader, loadPlaylistDetail, setMessage]);
 
     const loadAllSongs = useCallback(async () => {
         try {
@@ -96,6 +99,14 @@ export default function PlaylistManager() {
     }, [authHeader, setMessage]);
 
     useEffect(() => {
+        selectedPlaylistIdRef.current = selectedPlaylistId;
+    }, [selectedPlaylistId]);
+
+    useEffect(() => {
+        if (hasInitializedRef.current) {
+            return;
+        }
+        hasInitializedRef.current = true;
         void Promise.all([loadPlaylists(), loadAllSongs(), loadUsers()]);
     }, [loadAllSongs, loadPlaylists, loadUsers]);
 

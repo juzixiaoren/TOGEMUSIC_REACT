@@ -11,4 +11,4 @@ RUN pip install -r requirements.txt
 COPY . .
 
 EXPOSE 8034
-CMD ["python", "./server/app.py"]
+CMD ["sh", "-c", "gunicorn --worker-class geventwebsocket.gunicorn.workers.GeventWebSocketWorker --workers ${GUNICORN_WORKERS:-3} --bind 0.0.0.0:${BACKEND_PORT:-8034} --timeout 120 server.app:app"]

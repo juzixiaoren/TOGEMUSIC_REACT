@@ -75,7 +75,7 @@ export const SocketProvider = ({ children }: { children: ReactNode }) => {
         // 建立 Socket 连接
         const socket = io('/', {
             path: '/socket.io',
-            transports: ['websocket', 'polling']
+            transports: ['websocket']
         });
 
         socketRef.current = socket;

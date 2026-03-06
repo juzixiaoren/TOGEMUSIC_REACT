@@ -64,7 +64,7 @@ body {
 
   background-image:
     linear-gradient(90deg, rgba(255, 255, 255, 0.55), rgba(182, 181, 181, 0)),
-    url(../dist/assets/终末地视频帧-_sx5INNN.jpg);
+    url(/终末地视频帧-_sx5INNN.jpg);
 
   background-size: cover;
   background-position: center;
@@ -97,24 +97,24 @@ body {
 
 @font-face {
   font-family: 'MyFont';
-  src: url('./assets/fonts/MO-UDShinGoSCGb4-DeB_Compressed.woff2') format('woff2');
+  src: url('/MO-UDShinGoSCGb4-DeB_Compressed.woff2') format('woff2');
   font-weight: normal;
 }
 
 @font-face {
   font-family: 'MyFont';
-  src: url('./assets/fonts/MO-UDShinGoSCGb4-DeB_Compressed.woff2') format('woff2');
+  src: url('/MO-UDShinGoSCGb4-DeB_Compressed.woff2') format('woff2');
   font-weight: bold;
 }
 
 @font-face {
   font-family: 'MyFont2';
-  src: url('./assets/fonts/Novecentowide-Bold.otf') format('opentype');
+  src: url('/Novecentowide-Bold.otf') format('opentype');
 }
 
 @font-face {
   font-family: 'MCFont';
-  src: url(./assets/fonts/5_Minecraft.ttf) format('truetype');
+  src: url('/5_Minecraft.ttf') format('truetype');
 }
 
 
@@ -136,7 +136,7 @@ body {
 
   min-width: 100vw;
   min-height: 100vh;
-  background-image: linear-gradient(90deg, rgba(255, 255, 255, 0.548), rgba(182, 181, 181, 0)), url('./assets/images/终末地视频帧.jpg');
+  background-image: linear-gradient(90deg, rgba(255, 255, 255, 0.548), rgba(182, 181, 181, 0)), url('/终末地视频帧-_sx5INNN.jpg');
   background-size: cover;
   background-position: center;
   background-repeat: no-repeat;
