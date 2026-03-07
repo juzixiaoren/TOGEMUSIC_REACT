@@ -78,14 +78,14 @@ class Song:
         row = cursor.fetchone()
         max_index = row[0] if row[0] is not None else None
 
-        if max_index is None:
+        if max_index is None or max_index <= 1:
             return
 
         tmp = max_index + 1
 
         conn = self.get_conn()
         try:
-            # 将 order_index = 1 的歌移到最后
+            # 将 order_index = 1 的歌移到临时位置
             self.execute(
                 "UPDATE playlist_songs SET order_index = ? "
                 "WHERE playlist_id = 1 AND order_index = 1",
@@ -95,10 +95,18 @@ class Song:
             # 其他 song 的 order_index 前移
             self.execute(
                 "UPDATE playlist_songs SET order_index = order_index - 1 "
-                "WHERE playlist_id = 1 AND order_index > 1"
+                "WHERE playlist_id = 1 AND order_index > 1 AND order_index < ?",
+                (tmp,)
+            )
+
+            # 将临时位置的歌放到最后（max_index，因为前面的都减了1）
+            self.execute(
+                "UPDATE playlist_songs SET order_index = ? "
+                "WHERE playlist_id = 1 AND order_index = ?",
+                (max_index, tmp)
             )
             conn.commit()
-                
+
         except Exception as e:
             conn.rollback()
             print("rotate_playlist_index failed:", e)

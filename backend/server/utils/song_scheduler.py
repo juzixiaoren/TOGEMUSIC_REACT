@@ -26,11 +26,14 @@ class SongScheduler:
         """
         # 取消之前的定时器
         self.cancel_current()
+        print(f"⏰ 设置定时器: start_time={start_time_ms}, duration={duration_ms}ms")
+        print (f"⏰ 当前时间: {int(time.time() * 1000)}ms")
         
         # 计算剩余播放时间
         now_ms = int(time.time() * 1000)
         elapsed_ms = now_ms - start_time_ms  # 已经播放的时长
         remaining_ms = duration_ms - elapsed_ms  # 还需要播放的时长
+        print(f"⏰ 计算剩余时间: 已播放 {elapsed_ms}ms, 还剩 {remaining_ms}ms")
         
         if remaining_ms <= 0:
             # 歌曲应该已经结束了，立即触发
@@ -55,13 +58,13 @@ class SongScheduler:
         with self.lock:
             if self.current_timer and self.current_timer.is_alive():
                 self.current_timer.cancel()
-                print("⏰ 定时器已取消（客户端主动通知）")
+                print("⏰ 定时器已清理")
             self.current_timer = None
     
     def _on_song_end(self):
         """歌曲结束时触发（精确时间，无轮询）"""
         print("🎵 定时器触发：歌曲播放完毕，准备切换下一首")
-        
+        print(f"⏰ 当前时间: {int(time.time() * 1000)}ms")
         if self.callback:
             try:
                 self.callback()  # 执行切歌回调

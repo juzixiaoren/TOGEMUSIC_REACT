@@ -1014,7 +1014,7 @@ def request_play():
 def clear_playlist():
     """清空播放列表，取消定时器"""
     playlist_model.clear_playlist(1)
-    song_scheduler.cancel_current()  # 取消定时器
+    song_scheduler.cancel_current(reason="播放列表已清空")  # 取消定时器
     return jsonify({'message': 'Playlist cleared', 'success': True}), 200
 
 @music_bp.route('/removesongfromplaylist', methods=['POST'])

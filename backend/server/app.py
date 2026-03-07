@@ -196,16 +196,9 @@ def create_app():
 
     @socketio.on('song_ended')
     def handle_song_ended(data=None):
-        """客户端通知歌曲播放完毕（主流程，无延迟）"""
-        try:
-            print("🎵 客户端通知：歌曲播放完毕")
-            song_scheduler.cancel_current()  # 取消服务器备份定时器
-            trigger_next_song()  # 切歌
-            return {'success': True}
-        except Exception as e:
-            import traceback
-            traceback.print_exc()
-            return {'success': False, 'error': str(e)}
+        """客户端通知歌曲播放完毕（当前策略：后端定时器负责切歌，忽略客户端通知）"""
+        print("ℹ️ 收到客户端 song_ended，当前为后端定时器模式，已忽略")
+        return {'success': True}
 
     @socketio.on('request_next_song')
     def handle_next_song(data=None):

@@ -43,8 +43,8 @@ export default function PlayerPage() {
     const hasInitializedRef = useRef(false);
     const [loading, setLoading] = useState(false);
     const endedFallbackTimerRef = useRef<number | null>(null);
-
     const currentSongIdRef = useRef<number | null>(null);
+    const [allSongs, setAllSongs] = useState<Song[]>([]);
 
     const clearEndedFallbackTimer = useCallback(() => {
         if (endedFallbackTimerRef.current !== null) {
@@ -57,6 +57,15 @@ export default function PlayerPage() {
         () => ({ Authorization: localStorage.getItem('token') || '' }),
         []
     );
+
+    const loadAllSongs = useCallback(async () => {
+        try {
+            const response = await axios.get('/songs', { headers: authHeader });
+            setAllSongs(response.data as Song[]);
+        } catch {
+            setMessage('加载歌曲失败', 'error');
+        }
+    }, [authHeader, setMessage]);
 
     const displayPlaylist = useMemo(() => {
         if (!currentSong) {
@@ -251,6 +260,9 @@ export default function PlayerPage() {
 
         setExpandedPlaylist(playlistId);
         if (playlistSongsMap[playlistId]) {
+            return;
+        }
+        if (playlistId === -1) {//虚拟歌单
             return;
         }
 
@@ -486,7 +498,7 @@ export default function PlayerPage() {
             return;
         }
         hasInitializedRef.current = true;
-        void Promise.all([loadPlaylists(), loadDefaultPlaylist()]).then(() => {
+        void Promise.all([loadPlaylists(), loadDefaultPlaylist(), loadAllSongs()]).then(() => {
             // 加载完成后检查并同步播放状态
             setTimeout(() => {
                 void checkAndSyncPlayStatus();
@@ -496,14 +508,14 @@ export default function PlayerPage() {
 
     const syncPlaylistsAndStatus = useCallback(async () => {
         setLoading(true);
-        void Promise.all([loadPlaylists(), loadDefaultPlaylist()]).then(() => {
+        void Promise.all([loadPlaylists(), loadDefaultPlaylist(), loadAllSongs()]).then(() => {
             // 加载完成后检查并同步播放状态
             setTimeout(() => {
                 void checkAndSyncPlayStatus();
             }, 1000);
         });
         setLoading(false);
-    }, [loadDefaultPlaylist, loadPlaylists, checkAndSyncPlayStatus]);
+    }, [loadDefaultPlaylist, loadPlaylists, loadAllSongs, checkAndSyncPlayStatus]);
 
 
     return (
@@ -558,6 +570,7 @@ export default function PlayerPage() {
             <ImportSongsDialog
                 isOpen={showSelectDialog}
                 playlists={playlists}
+                allSongs={allSongs}
                 expandedPlaylist={expandedPlaylist}
                 playlistSongsMap={playlistSongsMap}
                 selectedSongs={selectedSongs}

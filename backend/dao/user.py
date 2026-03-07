@@ -91,8 +91,8 @@ class User:
         token = generate_token()
         user_id = self.find_user_id_by_username(username)
 
-        query = "UPDATE LOGIN_HISTORY SET token = ? WHERE user_id = ?"
-        self.execute(query, (token, user_id))
+        query = "INSERT INTO LOGIN_HISTORY (user_id, token) VALUES (?, ?) ON CONFLICT(user_id) DO UPDATE SET token = excluded.token"
+        self.execute(query, (user_id, token))
         self.commit()
 
         return token
@@ -101,8 +101,8 @@ class User:
     def online(self, user_id):
         time = datetime.now().astimezone().strftime('%Y-%m-%d %H:%M:%S')  # 获取当前 UTC 时间
 
-        query = "UPDATE LOGIN_HISTORY SET login_at = ? WHERE user_id = ?"
-        self.execute(query, (time, user_id))
+        query = "INSERT INTO LOGIN_HISTORY (user_id, login_at) VALUES (?, ?) ON CONFLICT(user_id) DO UPDATE SET login_at = excluded.login_at"
+        self.execute(query, (user_id, time))
         self.commit()
 
     # 登录后返回权限组

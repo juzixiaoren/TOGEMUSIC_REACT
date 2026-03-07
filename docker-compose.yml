@@ -2,7 +2,7 @@ services:
   frontend:
     build:
       context: ./frontend
-    image: juzixiaoren/togemusic-react:frontend-v3 # 您的前端镜像名
+    image: juzixiaoren/togemusic-react:frontend-v4 # 您的前端镜像名
     ports:
       - "14514:14514"
     depends_on:
@@ -10,7 +10,7 @@ services:
 
   backend:
     build: ./backend
-    image: juzixiaoren/togemusic-react:backend-v3 # 您的后端镜像名
+    image: juzixiaoren/togemusic-react:backend-v4 # 您的后端镜像名
     ports:
       - "8034:8034"
     depends_on:
@@ -24,7 +24,7 @@ services:
       - PYTHONUNBUFFERED=1
       - SOCKETIO_ASYNC_MODE=gevent
       - SOCKETIO_MESSAGE_QUEUE=redis://redis:6379/0
-      - GUNICORN_WORKERS=3
+      - GUNICORN_WORKERS=1
       - QQMUSIC_COOKIE=${QQMUSIC_COOKIE:-}
 
   redis:
