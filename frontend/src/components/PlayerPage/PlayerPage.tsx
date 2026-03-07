@@ -20,14 +20,13 @@ export default function PlayerPage() {
         currentTime,
         playSong,
         stopPlayback,
-        handleSetVolume,
         setOnEndedCallback,
+        handleSetVolume,
         nextSong,
         prevSong,
         shufflePlaylist
     } = useAudio();
     const {
-        emitSongEnded,
         registerEventHandlers,
         unregisterEventHandlers
     } = useSocket();
@@ -42,8 +41,17 @@ export default function PlayerPage() {
     const [draggedIndex, setDraggedIndex] = useState<number | null>(null);
     const [currentSongCoverUrl, setCurrentSongCoverUrl] = useState<string | null>(null);
     const hasInitializedRef = useRef(false);
+    const [loading, setLoading] = useState(false);
+    const endedFallbackTimerRef = useRef<number | null>(null);
 
     const currentSongIdRef = useRef<number | null>(null);
+
+    const clearEndedFallbackTimer = useCallback(() => {
+        if (endedFallbackTimerRef.current !== null) {
+            window.clearTimeout(endedFallbackTimerRef.current);
+            endedFallbackTimerRef.current = null;
+        }
+    }, []);
 
     const authHeader = useMemo(
         () => ({ Authorization: localStorage.getItem('token') || '' }),
@@ -79,8 +87,10 @@ export default function PlayerPage() {
         return `${mins}:${secs.toString().padStart(2, '0')}`;
     }, []);
 
-    // 获取封面图
-    const fetchSongCover = useCallback(async (songId: number) => {
+    // 获取封面图（本地失败时，QQ 歌曲回退到官方封面）
+    const fetchSongCover = useCallback(async (song: Song) => {
+        const songId = song.id;
+        const isQQSong = (song.title || '').endsWith('[qq]') || (song.file_path || '').includes('qq.com');
         try {
             const response = await axios.get(`/songs/${songId}/cover`, { headers: authHeader });
             if (currentSongIdRef.current !== songId) {
@@ -92,8 +102,26 @@ export default function PlayerPage() {
                 setCurrentSongCoverUrl(null);
             }
         } catch {
-            if (currentSongIdRef.current === songId) {
+            if (currentSongIdRef.current !== songId) {
+                return;
+            }
+
+            if (!isQQSong) {
                 setCurrentSongCoverUrl(null);
+                return;
+            }
+
+            try {
+                const qqCoverResp = await axios.get(`/qqmusic/cover/${songId}`, { headers: authHeader });
+                if (currentSongIdRef.current !== songId) {
+                    return;
+                }
+                const cover = qqCoverResp.data?.cover;
+                setCurrentSongCoverUrl(typeof cover === 'string' && cover ? cover : null);
+            } catch {
+                if (currentSongIdRef.current === songId) {
+                    setCurrentSongCoverUrl(null);
+                }
             }
         }
     }, [authHeader]);
@@ -126,7 +154,7 @@ export default function PlayerPage() {
             setCurrentSong(song);
             currentSongIdRef.current = song.id;
             setCurrentSongCoverUrl(null);
-            void fetchSongCover(song.id);
+            void fetchSongCover(song);
         }
         return success;
     }, [fetchSongCover, playSong]);
@@ -313,6 +341,31 @@ export default function PlayerPage() {
         }
     }, [authHeader, playWithOffset, setMessage]);
 
+    const scheduleEndedFallbackSync = useCallback(() => {
+        clearEndedFallbackTimer();
+
+        // 记录当前歌曲，5 秒后若还未切歌，主动拉一次播放状态。
+        const endedSongId = currentSongIdRef.current;
+        endedFallbackTimerRef.current = window.setTimeout(() => {
+            endedFallbackTimerRef.current = null;
+            if (endedSongId !== null && currentSongIdRef.current === endedSongId) {
+                console.log('5秒内未收到新歌事件，主动同步播放状态');
+                void checkAndSyncPlayStatus();
+            }
+        }, 5000);
+    }, [checkAndSyncPlayStatus, clearEndedFallbackTimer]);
+
+    useEffect(() => {
+        setOnEndedCallback(() => {
+            scheduleEndedFallbackSync();
+        });
+
+        return () => {
+            setOnEndedCallback(null);
+            clearEndedFallbackTimer();
+        };
+    }, [clearEndedFallbackTimer, scheduleEndedFallbackSync, setOnEndedCallback]);
+
     // 开始播放（请求后端开始）
     const startPlay = useCallback(async () => {
         if (currentPlaylist.length === 0) {
@@ -341,6 +394,7 @@ export default function PlayerPage() {
         const handlers: SocketEventHandlers = {
             // 歌曲切换事件
             onSongChanged: async (data) => {
+                clearEndedFallbackTimer();
                 const songInfo = data.current_song;
                 if (songInfo) {
                     setMessage(`🎵 正在播放: ${songInfo.title} - ${songInfo.artist}`, 'success');
@@ -368,6 +422,7 @@ export default function PlayerPage() {
 
             // 歌曲删除且需要切歌事件
             onSongDeletedAndChanged: async (data) => {
+                clearEndedFallbackTimer();
                 setCurrentPlaylist(data.playlist);
 
                 if (data.new_song && data.new_song_id) {
@@ -390,6 +445,7 @@ export default function PlayerPage() {
             // 初始播放状态同步
             onSyncPlayStatus: async (data) => {
                 if (data.is_playing && data.current_song) {
+                    clearEndedFallbackTimer();
                     const serverNow = data.server_now;
                     const startTime = new Date(data.play_start_time).getTime();
                     const offset = Math.max(0, Math.floor((serverNow - startTime) / 1000));
@@ -414,6 +470,7 @@ export default function PlayerPage() {
         };
     }, [
         currentPlaylist,
+        clearEndedFallbackTimer,
         playWithOffset,
         registerEventHandlers,
         rotatePlaylistTo,
@@ -422,17 +479,6 @@ export default function PlayerPage() {
         unregisterEventHandlers
     ]);
 
-    // 设置歌曲结束回调
-    useEffect(() => {
-        setOnEndedCallback(() => {
-            console.log('歌曲播放结束，通知后端');
-            emitSongEnded();
-        });
-
-        return () => {
-            setOnEndedCallback(null);
-        };
-    }, [emitSongEnded, setOnEndedCallback]);
 
     // 初始加载
     useEffect(() => {
@@ -447,6 +493,17 @@ export default function PlayerPage() {
             }, 1000);
         });
     }, []);
+
+    const syncPlaylistsAndStatus = useCallback(async () => {
+        setLoading(true);
+        void Promise.all([loadPlaylists(), loadDefaultPlaylist()]).then(() => {
+            // 加载完成后检查并同步播放状态
+            setTimeout(() => {
+                void checkAndSyncPlayStatus();
+            }, 1000);
+        });
+        setLoading(false);
+    }, [loadDefaultPlaylist, loadPlaylists, checkAndSyncPlayStatus]);
 
 
     return (
@@ -511,6 +568,18 @@ export default function PlayerPage() {
                 onImportSelectedSongs={() => { void importSelectedSongs(); }}
                 onClose={() => setShowSelectDialog(false)}
             />
+            <button onClick={syncPlaylistsAndStatus} disabled={loading} style={{
+                height: '50px',
+                border: '1px solid rgb(29 178 185)',
+                backgroundColor: 'rgb(29 185 178)',
+                color: 'white',
+                borderRadius: '29px 0px 20px 20px',
+                cursor: 'pointer',
+                display: 'block',
+                margin: '0px auto'
+            }}>
+                {loading ? '同步中' : '同步歌单和播放状态'}
+            </button>
         </>
     );
 }

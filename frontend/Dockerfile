@@ -6,6 +6,8 @@ COPY package*.json ./
 RUN npm install
 
 COPY . .
+ARG VITE_QQMUSIC_COOKIE
+ENV VITE_QQMUSIC_COOKIE=${VITE_QQMUSIC_COOKIE}
 RUN npm run build
 
 # 2. 运行阶段（用 nginx 托管）

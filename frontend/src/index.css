@@ -64,7 +64,7 @@ body {
 
   background-image:
     linear-gradient(90deg, rgba(255, 255, 255, 0.55), rgba(182, 181, 181, 0)),
-    url(/终末地视频帧-_sx5INNN.jpg);
+    url(/终末地视频帧.jpg);
 
   background-size: cover;
   background-position: center;
@@ -136,7 +136,7 @@ body {
 
   min-width: 100vw;
   min-height: 100vh;
-  background-image: linear-gradient(90deg, rgba(255, 255, 255, 0.548), rgba(182, 181, 181, 0)), url('/终末地视频帧-_sx5INNN.jpg');
+  background-image: linear-gradient(90deg, rgba(255, 255, 255, 0.548), rgba(182, 181, 181, 0)), url('/终末地视频帧.jpg');
   background-size: cover;
   background-position: center;
   background-repeat: no-repeat;

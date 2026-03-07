@@ -40,3 +40,7 @@ __pycache__/
 *.mp3
 *.db
 *.flac
+#config
+.config
+#.env
+.env

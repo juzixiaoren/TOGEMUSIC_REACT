@@ -20,14 +20,23 @@ from routes.music import music_bp
 
 scheduler = None
 socketio_async_mode = os.getenv("SOCKETIO_ASYNC_MODE", "threading")
+if os.name == "nt" and socketio_async_mode == "eventlet":
+    # eventlet 在 Windows 上稳定性较差，强制回退到 threading
+    print("⚠️ SOCKETIO_ASYNC_MODE=eventlet 在 Windows 上不稳定，已自动切换为 threading")
+    socketio_async_mode = "threading"
+
 socketio_message_queue = os.getenv("SOCKETIO_MESSAGE_QUEUE") or None
+socketio_ping_interval = int(os.getenv("SOCKETIO_PING_INTERVAL", "10"))
+socketio_ping_timeout = int(os.getenv("SOCKETIO_PING_TIMEOUT", "15"))
 # 开启 logger 和 engineio_logger 方便排查 WebSocket 400 错误
 socketio = SocketIO(
     logger=True,
     engineio_logger=True,
     cors_allowed_origins="*",
     async_mode=socketio_async_mode,
-    message_queue=socketio_message_queue
+    message_queue=socketio_message_queue,
+    ping_interval=socketio_ping_interval,
+    ping_timeout=socketio_ping_timeout
 )
 
 import time

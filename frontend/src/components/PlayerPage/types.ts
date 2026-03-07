@@ -4,6 +4,7 @@ export type Song = {
     artist: string;
     duration: number;
     file_extension: string;
+    file_path?: string;
 };
 
 export type Playlist = {

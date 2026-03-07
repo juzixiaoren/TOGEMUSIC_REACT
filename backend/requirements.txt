@@ -12,3 +12,4 @@ PyJWT
 redis
 flask_apscheduler
 python-dotenv
+requests

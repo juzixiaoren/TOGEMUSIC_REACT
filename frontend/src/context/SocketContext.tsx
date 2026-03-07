@@ -48,7 +48,6 @@ export interface SocketEventHandlers {
 
 export interface SocketContextType {
     isConnected: boolean;
-    emitSongEnded: () => void;
     emitRequestNextSong: (callback?: (response: { success: boolean }) => void) => void;
     emitRequestPrevSong: (callback?: (response: { success: boolean }) => void) => void;
     emitRequestShuffle: (callback?: (response: { success: boolean }) => void) => void;
@@ -72,10 +71,23 @@ export const SocketProvider = ({ children }: { children: ReactNode }) => {
     const handlersRef = useRef<SocketEventHandlers>({});
 
     useEffect(() => {
+        // 开发环境默认直连后端，避免 Vite WS 代理导致的 transport close。
+        const socketBaseUrl = import.meta.env.VITE_SOCKET_URL || (
+            import.meta.env.DEV
+                ? `${window.location.protocol}//${window.location.hostname}:8034`
+                : '/'
+        );
+
         // 建立 Socket 连接
-        const socket = io('/', {
+        const socket = io(socketBaseUrl, {
             path: '/socket.io',
-            transports: ['websocket']
+            // 允许 polling 回退，降低本地代理/网络抖动导致的断连概率
+            transports: ['websocket', 'polling'],
+            reconnection: true,
+            reconnectionAttempts: Infinity,
+            reconnectionDelay: 1000,
+            reconnectionDelayMax: 5000,
+            timeout: 10000
         });
 
         socketRef.current = socket;
@@ -85,9 +97,34 @@ export const SocketProvider = ({ children }: { children: ReactNode }) => {
             setIsConnected(true);
         });
 
-        socket.on('disconnect', () => {
-            console.log('Socket 已断开');
+        socket.on('disconnect', (reason) => {
+            console.log('Socket 已断开:', reason);
             setIsConnected(false);
+
+            // 服务端主动断开时，手动拉起一次重连。
+            if (reason === 'io server disconnect') {
+                socket.connect();
+            }
+        });
+
+        socket.on('connect_error', (error) => {
+            console.warn('Socket 连接失败:', error.message);
+        });
+
+        socket.io.on('reconnect_attempt', (attempt) => {
+            console.log('Socket 重连尝试:', attempt);
+        });
+
+        socket.io.on('reconnect', (attempt) => {
+            console.log('Socket 重连成功，尝试次数:', attempt);
+        });
+
+        socket.io.on('reconnect_error', (error) => {
+            console.warn('Socket 重连失败:', error.message);
+        });
+
+        socket.io.on('reconnect_failed', () => {
+            console.error('Socket 重连失败：已达到最大重试次数');
         });
 
         // 监听后端事件并转发给注册的处理器
@@ -127,9 +164,6 @@ export const SocketProvider = ({ children }: { children: ReactNode }) => {
         };
     }, []);
 
-    const emitSongEnded = () => {
-        socketRef.current?.emit('song_ended');
-    };
 
     const emitRequestNextSong = (callback?: (response: { success: boolean }) => void) => {
         socketRef.current?.emit('request_next_song', {}, callback);
@@ -154,7 +188,6 @@ export const SocketProvider = ({ children }: { children: ReactNode }) => {
     return (
         <SocketContext.Provider value={{
             isConnected,
-            emitSongEnded,
             emitRequestNextSong,
             emitRequestPrevSong,
             emitRequestShuffle,

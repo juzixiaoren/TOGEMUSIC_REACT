@@ -32,8 +32,8 @@ axios.interceptors.response.use(
   }
 )
 
+const appNode = <App />
+
 createRoot(document.getElementById('root')!).render(
-  <StrictMode>
-    <App />
-  </StrictMode>,
+  import.meta.env.DEV ? appNode : <StrictMode>{appNode}</StrictMode>,
 )

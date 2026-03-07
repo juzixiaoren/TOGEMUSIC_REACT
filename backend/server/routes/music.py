@@ -1,17 +1,21 @@
 from flask import Blueprint, request, jsonify, send_from_directory
 from flask import send_file, abort, current_app, Response, stream_with_context, make_response
+import requests
 from dao.song import Song
 from dao.playlist import Playlist
 from dao.user import User
+from utils.qqmusic_tool import QQMusicTool
 from utils.song_scheduler import song_scheduler
 import os
 import time
 import json
+import re
 import mimetypes
 import shutil
 import subprocess
 import uuid
 import tempfile
+from urllib.parse import urlparse
 from mutagen.id3 import ID3
 from mutagen.flac import FLAC
 from io import BytesIO
@@ -36,6 +40,40 @@ os.makedirs(CHUNK_TEMP_DIR, exist_ok=True)
 # 上传会话映射表：存储每个上传会话的元数据
 UPLOAD_SESSIONS = {}
 FLAC_BLOCK_SIZE = 4096
+QQ_IMPORT_PLAYLIST_NAME = 'QQ音乐导入歌单'
+QQ_TITLE_SUFFIX = '[qq]'
+
+
+def _normalize_qq_title(raw_title: str) -> str:
+    title = (raw_title or '').strip()
+    if not title:
+        return title
+    if title.endswith(QQ_TITLE_SUFFIX):
+        return title
+    return f'{title}{QQ_TITLE_SUFFIX}'
+
+
+def _ensure_playlist_id_by_name(user_id: int, playlist_name: str) -> int:
+    existed = playlist_model.execute(
+        'SELECT id FROM playlists WHERE playlist_name = ? LIMIT 1',
+        (playlist_name,)
+    ).fetchone()
+    if existed:
+        return existed['id']
+
+    playlist_model.execute(
+        'INSERT OR IGNORE INTO playlists (creater_id, playlist_name) VALUES (?, ?)',
+        (user_id, playlist_name)
+    )
+    playlist_model.commit()
+
+    created = playlist_model.execute(
+        'SELECT id FROM playlists WHERE playlist_name = ? LIMIT 1',
+        (playlist_name,)
+    ).fetchone()
+    if created:
+        return created['id']
+    return 1
 
 
 def _session_meta_path(session_id: str) -> str:
@@ -233,6 +271,116 @@ def _iter_file_range(file_path: str, start: int, end: int, chunk_size: int = STR
 def verify_token(token):
     return user_model.query_token(token)
 
+
+
+
+def _guess_ext_from_url(play_url: str, fallback: str = 'm4a') -> str:
+    try:
+        path = urlparse(play_url).path or ''
+        base = os.path.basename(path)
+        if '.' in base:
+            ext = base.rsplit('.', 1)[-1].lower()
+            if ext:
+                return ext
+    except Exception:
+        pass
+    return fallback
+
+
+def _extract_qqmusic_search_items(payload: dict):
+    data = payload.get('data') if isinstance(payload, dict) else None
+    if not isinstance(data, dict):
+        return []
+
+    raw_items = []
+
+    # 常见结构：data.list
+    if isinstance(data.get('list'), list):
+        raw_items = data.get('list')
+    else:
+        # 兼容 search 原始结构
+        song_section = data.get('song') if isinstance(data.get('song'), dict) else {}
+        if isinstance(song_section.get('list'), list):
+            raw_items = song_section.get('list')
+
+    result = []
+    for item in raw_items:
+        if not isinstance(item, dict):
+            continue
+
+        songmid = item.get('songmid') or item.get('mid') or item.get('id')
+        title = item.get('songname') or item.get('title') or ''
+        singers = item.get('singer') if isinstance(item.get('singer'), list) else []
+        artist = '/'.join([s.get('name', '') for s in singers if isinstance(s, dict) and s.get('name')])
+        if not artist:
+            artist = item.get('artist') or ''
+
+        interval = item.get('interval')
+        duration_ms = int(interval * 1000) if isinstance(interval, (int, float)) else int(item.get('duration') or 0)
+
+        result.append({
+            'songmid': songmid,
+            'title': title,
+            'artist': artist,
+            'duration': duration_ms,
+            'strMediaMid': item.get('strMediaMid') or item.get('media_mid') or songmid
+        })
+
+    return result
+
+
+def _create_qqmusic_tool() -> QQMusicTool:
+    # 运行时从后端环境变量读取 QQ cookie，前端不再持有敏感信息。
+    cookie_header = (os.getenv('QQMUSIC_COOKIE') or '').strip()
+    # 兼容历史调用：若环境变量为空，仍允许旧版前端透传。
+    if not cookie_header:
+        cookie_header = (request.headers.get('X-QQMusic-Cookie') or '').strip()
+    return QQMusicTool(cookie_header=cookie_header, timeout=15)
+
+
+def _extract_play_url(payload: dict):
+    if not isinstance(payload, dict):
+        return None
+
+    req_data = (((payload.get('req_1') or {}).get('data') or {}))
+    if isinstance(req_data, dict):
+        sip = req_data.get('sip') or []
+        mid_url_info = req_data.get('midurlinfo') or []
+        base_url = sip[0] if sip else ''
+        purl = (mid_url_info[0] or {}).get('purl') if mid_url_info else ''
+        if purl:
+            return f'{base_url}{purl}'
+
+    data = payload.get('data')
+    if isinstance(data, str):
+        return data
+    if isinstance(data, dict):
+        if isinstance(data.get('url'), str):
+            return data.get('url')
+        for _, value in data.items():
+            if isinstance(value, str) and value.startswith('http'):
+                return value
+    return None
+
+
+def _is_qq_song(song: dict) -> bool:
+    title = str((song or {}).get('title') or '')
+    file_path = str((song or {}).get('file_path') or '')
+    return title.endswith('[qq]') or ('qq.com' in file_path and file_path.startswith('http'))
+
+
+def _extract_songmid_from_song(song: dict):
+    file_path = str((song or {}).get('file_path') or '')
+    if not file_path:
+        return None
+
+    # 常见 purl 格式：M800<songmid><mediaid>.mp3 / C400<songmid><mediaid>.m4a
+    for pattern in [r'(?:C400|M500|M800|A000|F000)([A-Za-z0-9]{14})', r'/([A-Za-z0-9]{14})\.[A-Za-z0-9]+(?:\?|$)']:
+        match = re.search(pattern, file_path)
+        if match:
+            return match.group(1)
+    return None
+
 @music_bp.route('/upload', methods=['POST'])
 def upload_music():
     print(">>> Upload request received")  # 添加日志以确认请求到达
@@ -277,7 +425,6 @@ def upload_music():
             durations.append(int(d_val))
         except (TypeError, ValueError):
             durations.append(0)
-        i += 1
 
     for i, file in enumerate(files):
         if file and file.filename:
@@ -306,6 +453,140 @@ def upload_music():
 def get_songs():
     songs = song_model.get_all_songs()
     return jsonify([dict(song) for song in songs]), 200
+
+
+@music_bp.route('/qqmusic/search', methods=['GET'])
+def qqmusic_search():
+    token = request.headers.get('Authorization')
+    user_id = verify_token(token)
+    if not user_id:
+        return jsonify({'message': 'Invalid token'}), 401
+
+    key = (request.args.get('key') or '').strip()
+    if not key:
+        return jsonify({'message': 'key is required'}), 400
+
+    page_no = int(request.args.get('pageNo', '1'))
+    page_size = int(request.args.get('pageSize', '20'))
+    qqmusic = _create_qqmusic_tool()
+    try:
+        song_data = qqmusic.search_with_keyword(
+            keyword=key,
+            search_type=0,
+            result_num=page_size,
+            page_num=page_no,
+            origin=False,
+        ) or {}
+
+        song_list = song_data.get('list') if isinstance(song_data, dict) else []
+        return jsonify({
+            'result': 100,
+            'data': {
+                'list': song_list or [],
+                'pageNo': song_data.get('curpage', page_no) if isinstance(song_data, dict) else page_no,
+                'pageSize': song_data.get('curnum', page_size) if isinstance(song_data, dict) else page_size,
+                'total': song_data.get('totalnum', len(song_list or [])) if isinstance(song_data, dict) else 0,
+                'key': key,
+                't': 0,
+                'type': 'song',
+            }
+        }), 200
+    except Exception as e:
+        return jsonify({'message': f'QQMusic API search failed: {str(e)}'}), 502
+
+
+
+
+@music_bp.route('/qqmusic/import', methods=['POST'])
+def qqmusic_import_song():
+    token = request.headers.get('Authorization')
+    user_id = verify_token(token)
+    if not user_id:
+        return jsonify({'message': 'Invalid token'}), 401
+
+    data = request.get_json() or {}
+    songmid = (data.get('songmid') or '').strip()
+    if not songmid:
+        return jsonify({'message': 'songmid is required'}), 400
+
+    title = _normalize_qq_title((data.get('title') or songmid))
+    artist = (data.get('artist') or '').strip()
+    duration = int(data.get('duration') or 0)
+    audio_type = (data.get('type') or 'm4a').strip().lower()
+    add_to_playlist = bool(data.get('addToPlaylist', True))
+
+    qqmusic = _create_qqmusic_tool()
+
+    try:
+        payload = qqmusic.get_music_url(songmid=songmid, quality=audio_type, origin=True)
+        play_url = _extract_play_url(payload)
+        if not play_url:
+            return jsonify({'message': 'No playable url returned from QQMusic API', 'raw': payload}), 502
+    except requests.RequestException as e:
+        return jsonify({'message': f'QQMusic upstream unavailable: {str(e)}'}), 502
+    except Exception as e:
+        return jsonify({'message': f'QQMusic import failed: {str(e)}'}), 500
+
+    exists = song_model.execute(
+        'SELECT id FROM songs WHERE title = ? AND artist = ? LIMIT 1',
+        (title, artist)
+    ).fetchone()
+    if exists:
+        if add_to_playlist:
+            target_playlist_id = _ensure_playlist_id_by_name(user_id, QQ_IMPORT_PLAYLIST_NAME)
+            try:
+                playlist_model.add_song_to_playlist(target_playlist_id, exists['id'])
+            except Exception:
+                pass
+        return jsonify({'message': 'Song already exists', 'songId': exists['id'], 'playUrl': play_url}), 200
+
+    file_extension = _guess_ext_from_url(play_url, audio_type)
+    song_model.add_song(title, artist, duration, play_url, user_id, file_extension)
+    created = song_model.execute('SELECT id FROM songs WHERE title = ? AND artist = ? LIMIT 1', (title, artist)).fetchone()
+    if created and add_to_playlist:
+        target_playlist_id = _ensure_playlist_id_by_name(user_id, QQ_IMPORT_PLAYLIST_NAME)
+        try:
+            playlist_model.add_song_to_playlist(target_playlist_id, created['id'])
+        except Exception:
+            pass
+
+    return jsonify({
+        'message': 'Imported successfully',
+        'songId': created['id'] if created else None,
+        'playUrl': play_url,
+        'fileExtension': file_extension
+    }), 201
+
+
+@music_bp.route('/qqmusic/cover/<int:song_id>', methods=['GET'])
+def qqmusic_cover(song_id):
+    token = request.headers.get('Authorization')
+    user_id = verify_token(token)
+    if not user_id:
+        return jsonify({'message': 'Invalid token'}), 401
+
+    song = song_model.get_song_by_id(song_id)
+    if not song:
+        return jsonify({'message': 'Song not found'}), 404
+
+    song_obj = dict(song)
+    if not _is_qq_song(song_obj):
+        return jsonify({'message': 'Not a QQ song'}), 400
+
+    songmid = _extract_songmid_from_song(song_obj)
+    if not songmid:
+        return jsonify({'message': 'Cannot extract songmid from song path'}), 404
+
+    qqmusic = _create_qqmusic_tool()
+    try:
+        cover_url = qqmusic.get_song_cover_image(songmid=songmid)
+        if not cover_url:
+            return jsonify({'cover': None}), 404
+        return jsonify({'cover': cover_url, 'songmid': songmid}), 200
+    except requests.RequestException as e:
+        return jsonify({'message': f'QQMusic upstream unavailable: {str(e)}'}), 502
+    except Exception as e:
+        return jsonify({'message': f'QQMusic cover fetch failed: {str(e)}'}), 500
 
 @music_bp.route('/playlists', methods=['GET'])
 def get_playlists():
@@ -391,9 +672,14 @@ def get_song_file(song_id, ext):
     if not song:
         abort(404, description='Song not found')
 
-    # song[5] is the stored file path. It might be a Windows path (e.g. E:\...)
+    # song[5] is the stored file path. It might be a Windows path (e.g. E:\...) or a remote URL
     # When running on Linux (Docker), os.path.basename won't handle '\' correctly.
     stored_path = song[5]
+
+    # 远程 URL 直接重定向，播放器继续使用原有 /songs/:id/file.ext 路径即可
+    if isinstance(stored_path, str) and (stored_path.startswith('http://') or stored_path.startswith('https://')):
+        return jsonify({'url': stored_path}), 302, {'Location': stored_path}
+
     if '\\' in stored_path:
         filename = stored_path.split('\\')[-1]
     else:

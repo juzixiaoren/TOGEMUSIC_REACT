@@ -6,6 +6,7 @@ import UploadDropzone from './UploadDropzone';
 import UploadFileTable from './UploadFileTable';
 import type { UploadFileItem } from './types';
 import './UploadMusic.css';
+import QQMusicFun from '../../QQMusicApi/QQMusicFun';
 
 const CHUNK_SIZE = 5 * 1024 * 1024;
 const MAX_CONCURRENT_CHUNKS = 3;
@@ -276,6 +277,7 @@ export default function UploadMusic() {
                     void uploadFiles();
                 }}
             />
+            <QQMusicFun />
         </div>
     );
 }
