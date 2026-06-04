@@ -13,3 +13,4 @@ redis
 flask_apscheduler
 python-dotenv
 requests
+cos-python-sdk-v5

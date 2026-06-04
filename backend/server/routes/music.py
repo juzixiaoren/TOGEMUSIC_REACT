@@ -6,6 +6,18 @@ from dao.playlist import Playlist
 from dao.user import User
 from utils.qqmusic_tool import QQMusicTool
 from utils.song_scheduler import song_scheduler
+from utils.cos_storage import (
+    is_cos_enabled,
+    generate_cos_key,
+    generate_presigned_upload_url,
+    generate_presigned_download_url,
+    extract_cos_key_from_path,
+)
+from dao.cookie_pool import CookiePool
+from dao.user_music_session import UserMusicSession
+
+cookie_pool = CookiePool()
+user_session_model = UserMusicSession()
 import os
 import time
 import json
@@ -329,12 +341,32 @@ def _extract_qqmusic_search_items(payload: dict):
     return result
 
 
-def _create_qqmusic_tool() -> QQMusicTool:
-    # 运行时从后端环境变量读取 QQ cookie，前端不再持有敏感信息。
-    cookie_header = (os.getenv('QQMUSIC_COOKIE') or '').strip()
-    # 兼容历史调用：若环境变量为空，仍允许旧版前端透传。
+def _create_qqmusic_tool(user_id: int = None) -> QQMusicTool:
+    """
+    创建QQ音乐工具实例，Cookie来源优先级：
+    1. 用户个人登录Session（用于获取用户个人歌单等）
+    2. Cookie池随机选取（共享，用于搜索、播放等）
+    3. 环境变量 QQMUSIC_COOKIE（兜底）
+    4. 请求头 X-QQMusic-Cookie（兼容旧版）
+    """
+    cookie_header = ''
+
+    # 如果指定了用户ID，优先使用用户个人session
+    if user_id:
+        cookie_header = user_session_model.get_session_data(user_id, 'qqmusic') or ''
+
+    # 其次从Cookie池随机选取
+    if not cookie_header:
+        cookie_header = cookie_pool.pick_random_cookie('qqmusic') or ''
+
+    # 兜底：环境变量
+    if not cookie_header:
+        cookie_header = (os.getenv('QQMUSIC_COOKIE') or '').strip()
+
+    # 兼容旧版前端透传
     if not cookie_header:
         cookie_header = (request.headers.get('X-QQMusic-Cookie') or '').strip()
+
     return QQMusicTool(cookie_header=cookie_header, timeout=15)
 
 
@@ -449,6 +481,64 @@ def upload_music():
     return jsonify({'message': 'Upload successful'}), 200
 
 
+@music_bp.route('/upload/init', methods=['POST'])
+def upload_init():
+    """生成预签名上传URL，前端直传COS"""
+    token = request.headers.get('Authorization')
+    if not token:
+        return jsonify({'message': 'No token provided'}), 401
+    user_id = verify_token(token)
+    if not user_id:
+        return jsonify({'message': 'Invalid token'}), 401
+
+    if not is_cos_enabled():
+        return jsonify({'message': 'COS storage not enabled'}), 400
+
+    data = request.get_json() or {}
+    filename = data.get('filename')
+    if not filename:
+        return jsonify({'message': 'filename is required'}), 400
+
+    cos_key = generate_cos_key(filename)
+    result = generate_presigned_upload_url(cos_key)
+
+    return jsonify({
+        'uploadUrl': result['url'],
+        'cosKey': f"cos:{result['key']}",
+        'expire': result['expire'],
+    }), 200
+
+
+@music_bp.route('/upload/complete', methods=['POST'])
+def upload_complete():
+    """前端COS直传完成后，通知后端写入数据库"""
+    token = request.headers.get('Authorization')
+    if not token:
+        return jsonify({'message': 'No token provided'}), 401
+    user_id = verify_token(token)
+    if not user_id:
+        return jsonify({'message': 'Invalid token'}), 401
+
+    data = request.get_json() or {}
+    cos_key = data.get('cosKey')  # "cos:songs/2024/06/xxx.mp3"
+    title = data.get('title', '')
+    artist = data.get('artist', '')
+    duration = int(data.get('duration', 0))
+    file_extension = data.get('fileExtension', '')
+    cover_base64 = data.get('coverBase64')  # 可选：前端提取的封面 base64
+
+    if not cos_key:
+        return jsonify({'message': 'cosKey is required'}), 400
+
+    # 存入数据库：file_path 存 "cos:xxx" 格式
+    song_model.add_song(title, artist, duration, cos_key, user_id, file_extension)
+
+    # 如果有封面数据，可以后续扩展存入单独的表或字段
+    # 当前先不存，封面提取仍走按需下载逻辑
+
+    return jsonify({'message': 'Upload recorded successfully', 'cosKey': cos_key}), 200
+
+
 @music_bp.route('/songs', methods=['GET'])
 def get_songs():
     songs = song_model.get_all_songs()
@@ -516,12 +606,36 @@ def qqmusic_import_song():
     add_to_playlist = bool(data.get('addToPlaylist', True))
 
     qqmusic = _create_qqmusic_tool()
+    used_cookie_id = None  # 用于记录成功/失败
 
     try:
         payload = qqmusic.get_music_url(songmid=songmid, quality=audio_type, origin=True)
         play_url = _extract_play_url(payload)
+
+        # 如果普通Cookie获取失败，尝试VIP Cookie重试
         if not play_url:
-            return jsonify({'message': 'No playable url returned from QQMusic API', 'raw': payload}), 502
+            vip_result = cookie_pool.pick_vip_cookie_with_id('qqmusic')
+            if vip_result:
+                vip_cookie, vip_cookie_id = vip_result
+                vip_qqmusic = QQMusicTool(cookie_header=vip_cookie, timeout=15)
+                try:
+                    payload = vip_qqmusic.get_music_url(songmid=songmid, quality=audio_type, origin=True)
+                    play_url = _extract_play_url(payload)
+                    if play_url:
+                        used_cookie_id = vip_cookie_id
+                        print(f"✅ VIP Cookie重试成功，songmid={songmid}")
+                except Exception as e:
+                    print(f"⚠️ VIP Cookie重试也失败: {e}")
+            else:
+                print(f"⚠️ 没有可用的VIP Cookie，songmid={songmid}")
+
+        if not play_url:
+            return jsonify({'message': 'No playable url returned from QQMusic API (tried VIP cookie)', 'raw': payload}), 502
+
+        # 记录Cookie使用成功
+        if used_cookie_id:
+            cookie_pool.record_success(used_cookie_id)
+
     except requests.RequestException as e:
         return jsonify({'message': f'QQMusic upstream unavailable: {str(e)}'}), 502
     except Exception as e:
@@ -672,9 +786,18 @@ def get_song_file(song_id, ext):
     if not song:
         abort(404, description='Song not found')
 
-    # song[5] is the stored file path. It might be a Windows path (e.g. E:\...) or a remote URL
-    # When running on Linux (Docker), os.path.basename won't handle '\' correctly.
+    # song[5] is the stored file path. It might be a Windows path, a remote URL, or a COS key.
     stored_path = song[5]
+
+    # COS 对象：生成预签名下载URL并重定向
+    if isinstance(stored_path, str) and stored_path.startswith('cos:'):
+        cos_key = extract_cos_key_from_path(stored_path)
+        try:
+            presigned_url = generate_presigned_download_url(cos_key)
+            return jsonify({'url': presigned_url}), 302, {'Location': presigned_url}
+        except Exception as e:
+            print(f"生成COS预签名URL失败: {e}")
+            abort(500, description='Failed to generate COS download URL')
 
     # 远程 URL 直接重定向，播放器继续使用原有 /songs/:id/file.ext 路径即可
     if isinstance(stored_path, str) and (stored_path.startswith('http://') or stored_path.startswith('https://')):
@@ -743,40 +866,67 @@ def get_song_cover(song_id):
     - JSON: { "cover": null } 如果没有封面
     - 404: 歌曲不存在
     """
+    import base64
+    
     song = song_model.get_song_by_id(song_id)
     if not song:
         return jsonify({'cover': None}), 404
     
     # song[5] 是存储的文件路径
     stored_path = song[5]
-    if '\\' in stored_path:
-        filename = stored_path.split('\\')[-1]
-    else:
-        filename = os.path.basename(stored_path)
-    
-    file_path = os.path.join(UPLOADS_DIR, filename)
     file_extension = song[6]  # song[6] 是文件扩展名
     
-    if not os.path.exists(file_path):
-        return jsonify({'cover': None}), 404
+    cover_data = None
     
-    try:
-        # 从音频文件中提取封面
-        cover_data = extract_cover_image(file_path, file_extension)
-        
-        if cover_data:
-            # 转换为 base64 data URL
-            import base64
-            b64_data = base64.b64encode(cover_data).decode('utf-8')
-            cover_url = f'data:image/jpeg;base64,{b64_data}'
-            return jsonify({'cover': cover_url}), 200
-        else:
-            # 没有找到封面
-            return jsonify({'cover': None}), 200
+    # 处理 COS 存储的文件
+    if isinstance(stored_path, str) and stored_path.startswith('cos:'):
+        cos_key = extract_cos_key_from_path(stored_path)
+        try:
+            from utils.cos_storage import generate_presigned_download_url
+            import tempfile
+            import requests as req_lib
             
-    except Exception as e:
-        print(f"获取歌曲 {song_id} 的封面失败: {e}")
-        return jsonify({'cover': None}), 500
+            # 从COS下载文件到临时目录
+            presigned_url = generate_presigned_download_url(cos_key, expire=300)
+            resp = req_lib.get(presigned_url, timeout=30)
+            resp.raise_for_status()
+            
+            with tempfile.NamedTemporaryFile(suffix=f'.{file_extension}', delete=False) as tmp:
+                tmp.write(resp.content)
+                tmp_path = tmp.name
+            
+            try:
+                cover_data = extract_cover_image(tmp_path, file_extension)
+            finally:
+                os.unlink(tmp_path)
+        except Exception as e:
+            print(f"从COS下载文件提取封面失败: {e}")
+            return jsonify({'cover': None}), 500
+    else:
+        # 本地文件
+        if '\\' in stored_path:
+            filename = stored_path.split('\\')[-1]
+        else:
+            filename = os.path.basename(stored_path)
+        
+        file_path = os.path.join(UPLOADS_DIR, filename)
+        
+        if not os.path.exists(file_path):
+            return jsonify({'cover': None}), 404
+        
+        try:
+            cover_data = extract_cover_image(file_path, file_extension)
+        except Exception as e:
+            print(f"提取封面失败: {e}")
+            return jsonify({'cover': None}), 500
+    
+    # 返回封面数据
+    if cover_data:
+        b64_data = base64.b64encode(cover_data).decode('utf-8')
+        cover_url = f'data:image/jpeg;base64,{b64_data}'
+        return jsonify({'cover': cover_url}), 200
+    else:
+        return jsonify({'cover': None}), 200
 
 @music_bp.route('/uploadchunkinit', methods=['POST'])
 def init_chunk_upload():
@@ -990,25 +1140,31 @@ def get_play_songs():
 @music_bp.route('/requestplay', methods=['POST'])
 def request_play():
     """开始播放，设置定时器"""
-    songs = playlist_model.get_playlist_songs(1)
-    if not songs or len(songs) == 0:
-        return jsonify({'status': False, 'message': 'No songs in playlist'}), 400
-    
-    now_time = int(time.time() * 1000 + 2 * 1000)
-    song_model.set_play_status(now_time, 1)
-    
-    # 设置精确定时器（备份机制）
     try:
-        duration = song_model.get_current_song_duration()
-        if duration:
-            song_scheduler.schedule_song_end(now_time, duration["duration"])
-            print(f"✅ 播放开始，定时器已设置")
-        else:
-            print("⚠️ 无法获取歌曲时长，定时器未设置")
+        songs = playlist_model.get_playlist_songs(1)
+        if not songs or len(songs) == 0:
+            return jsonify({'status': False, 'message': 'No songs in playlist'}), 400
+        
+        now_time = int(time.time() * 1000 + 2 * 1000)
+        song_model.set_play_status(now_time, 1)
+        
+        # 设置精确定时器（备份机制）
+        try:
+            duration = song_model.get_current_song_duration()
+            if duration:
+                song_scheduler.schedule_song_end(now_time, duration["duration"])
+                print(f"✅ 播放开始，定时器已设置")
+            else:
+                print("⚠️ 无法获取歌曲时长，定时器未设置")
+        except Exception as e:
+            print(f"⚠️ 设置定时器失败: {e}")
+        
+        return jsonify({'status': True, 'message': 'Request play successful'}), 200
     except Exception as e:
-        print(f"⚠️ 设置定时器失败: {e}")
-    
-    return jsonify({'status': True, 'message': 'Request play successful'}), 200
+        print(f"❌ requestplay 失败: {e}")
+        import traceback
+        traceback.print_exc()
+        return jsonify({'status': False, 'message': str(e)}), 500
 
 @music_bp.route('/clearplaylist', methods=['GET'])
 def clear_playlist():

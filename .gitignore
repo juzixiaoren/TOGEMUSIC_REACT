@@ -43,4 +43,5 @@ __pycache__/
 #config
 .config
 #.env
-.env
+*.env
+backend/.env

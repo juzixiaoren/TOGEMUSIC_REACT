@@ -8,6 +8,7 @@ import FeatureSwitchBar, { type FeatureKey } from '../../components/FeatureSwitc
 import PlayerPage from '../../components/PlayerPage/PlayerPage';
 import UploadMusic from '../../components/UploadMusic/UploadMusic';
 import PlaylistManager from '../../components/PlaylistManager/PlaylistManager';
+import MusicLogin from '../../components/MusicLogin/MusicLogin';
 import { AudioProvider } from '../../context/AudioContext';
 import { SocketProvider } from '../../context/SocketContext';
 export default function HomePage() {
@@ -42,6 +43,7 @@ export default function HomePage() {
                         <div className="home-feature-panel glass">
                             {activeFeature === 'upload' && <UploadMusic />}
                             {activeFeature === 'playlist' && <PlaylistManager />}
+                            {activeFeature === 'music-login' && <MusicLogin />}
                             {/* PlayerPage 始终挂载以保持 Socket 事件监听，切歌才能同步 */}
                             <div style={{ display: activeFeature === 'player' ? 'contents' : 'none' }}>
                                 <PlayerPage />

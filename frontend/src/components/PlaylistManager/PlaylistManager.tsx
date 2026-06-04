@@ -2,8 +2,10 @@ import axios from 'axios';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useMessage } from '../../context/MessageContext';
 import SongPickerDialog from './SongPickerDialog';
+import PlatformPlaylistImport from './PlatformPlaylistImport';
 import type { Playlist, Song, SortBy, User } from './types';
 import './PlaylistManager.css';
+import './PlatformPlaylistImport.css';
 
 export default function PlaylistManager() {
     const setMessage = useMessage().setMessage;
@@ -19,6 +21,7 @@ export default function PlaylistManager() {
 
     const [showCreateDialog, setShowCreateDialog] = useState(false);
     const [showImportDialog, setShowImportDialog] = useState(false);
+    const [showPlatformImportDialog, setShowPlatformImportDialog] = useState(false);
     const [newPlaylistName, setNewPlaylistName] = useState('');
 
     const [activeTab, setActiveTab] = useState<'songs' | 'playlists'>('songs');
@@ -297,7 +300,16 @@ export default function PlaylistManager() {
             <div className="playlist-manager-right">
                 <div className="playlist-manager-header">
                     <h2>{selectedPlaylist?.playlist_name || '请选择歌单'}</h2>
-                    <button type="button" className="playlist-primary-btn" onClick={openImportDialog}>导入歌曲</button>
+                    <div className="header-buttons">
+                        <button type="button" className="playlist-primary-btn" onClick={() => {
+                            if (!selectedPlaylistId) {
+                                setMessage('请先选择歌单', 'warning');
+                                return;
+                            }
+                            setShowPlatformImportDialog(true);
+                        }}>导入歌单</button>
+                        <button type="button" className="playlist-primary-btn" onClick={openImportDialog}>导入歌曲</button>
+                    </div>
                 </div>
                 <ul className="playlist-song-list">
                     {playlistSongs.map((song) => (
@@ -379,6 +391,20 @@ export default function PlaylistManager() {
                     setShowImportDialog(false);
                     resetPickerState();
                 }}
+            />
+
+            <PlatformPlaylistImport
+                open={showPlatformImportDialog}
+                targetPlaylistId={selectedPlaylistId || 0}
+                targetPlaylistName={selectedPlaylist?.playlist_name || ''}
+                onConfirm={async () => {
+                    setShowPlatformImportDialog(false);
+                    if (selectedPlaylistId) {
+                        await loadPlaylistDetail(selectedPlaylistId);
+                        await loadAllSongs();
+                    }
+                }}
+                onCancel={() => setShowPlatformImportDialog(false)}
             />
         </div>
     );

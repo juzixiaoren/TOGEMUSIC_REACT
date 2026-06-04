@@ -1,0 +1,9 @@
+{
+  "name": "puppeteer-scripts",
+  "version": "1.0.0",
+  "description": "Puppeteer scripts for music platform login",
+  "private": true,
+  "dependencies": {
+    "puppeteer": "^21.11.0"
+  }
+}

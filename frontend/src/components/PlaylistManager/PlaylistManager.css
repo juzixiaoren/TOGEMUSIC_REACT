@@ -25,6 +25,11 @@
     gap: 10px;
 }
 
+.header-buttons {
+    display: flex;
+    gap: 8px;
+}
+
 .playlist-manager-header h2 {
     margin: 0;
     font-size: 20px;

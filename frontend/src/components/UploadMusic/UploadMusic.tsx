@@ -14,6 +14,7 @@ export default function UploadMusic() {
     const setMessage = useMessage().setMessage;
     const [files, setFiles] = useState<UploadFileItem[]>([]);
     const [uploading, setUploading] = useState(false);
+    const [cosEnabled, setCosEnabled] = useState<boolean | null>(null);
 
     const authHeader = useMemo(
         () => ({ Authorization: localStorage.getItem('token') || '' }),
@@ -60,6 +61,25 @@ export default function UploadMusic() {
             URL.revokeObjectURL(url);
         };
     }, [formatDuration, updateFile]);
+
+    const extractCoverBase64 = useCallback(async (file: File): Promise<string | null> => {
+        try {
+            const metadata = await parseBlob(file);
+            const picture = metadata.common.picture?.[0];
+            if (!picture) {
+                return null;
+            }
+            const blob = new Blob([picture.data], { type: picture.format });
+            return new Promise((resolve) => {
+                const reader = new FileReader();
+                reader.onloadend = () => resolve(reader.result as string);
+                reader.onerror = () => resolve(null);
+                reader.readAsDataURL(blob);
+            });
+        } catch {
+            return null;
+        }
+    }, []);
 
     const parseMusicMetadata = useCallback(async (file: File, index: number) => {
         try {
@@ -157,6 +177,86 @@ export default function UploadMusic() {
         }
     }, [authHeader]);
 
+    const uploadSingleFileCos = useCallback(async (index: number) => {
+        const currentFile = files[index];
+        if (!currentFile || currentFile.uploadSuccess) {
+            return;
+        }
+
+        updateFile(index, (target) => ({
+            ...target,
+            uploading: true,
+            uploadError: false,
+            uploadProgress: 0,
+            uploadSessionId: null
+        }));
+
+        try {
+            const file = currentFile.file;
+
+            // 1. 从后端获取预签名上传URL
+            const initResponse = await axios.post('/upload/init', {
+                filename: file.name,
+            }, { headers: authHeader });
+
+            const { uploadUrl, cosKey } = initResponse.data;
+
+            // 2. 提取封面图
+            const coverBase64 = await extractCoverBase64(file);
+
+            // 3. 直传COS（带进度追踪）
+            await new Promise<void>((resolve, reject) => {
+                const xhr = new XMLHttpRequest();
+                xhr.open('PUT', uploadUrl);
+                xhr.setRequestHeader('Content-Type', file.type || 'application/octet-stream');
+
+                xhr.upload.onprogress = (event) => {
+                    if (event.lengthComputable) {
+                        const progress = Math.min(Math.round((event.loaded / event.total) * 99), 99);
+                        updateFile(index, (target) => ({ ...target, uploadProgress: progress }));
+                    }
+                };
+
+                xhr.onload = () => {
+                    if (xhr.status >= 200 && xhr.status < 300) {
+                        resolve();
+                    } else {
+                        reject(new Error(`COS上传失败: ${xhr.status}`));
+                    }
+                };
+
+                xhr.onerror = () => reject(new Error('COS上传网络错误'));
+                xhr.send(file);
+            });
+
+            // 4. 通知后端上传完成，写入数据库
+            const fileExtension = file.name.split('.').pop()?.toLowerCase() || '';
+            await axios.post('/upload/complete', {
+                cosKey,
+                title: currentFile.title,
+                artist: currentFile.artist,
+                duration: Math.floor(currentFile.durationSec * 1000),
+                fileExtension,
+                coverBase64,
+            }, { headers: authHeader });
+
+            updateFile(index, (target) => ({
+                ...target,
+                uploadProgress: 100,
+                uploadSuccess: true,
+                uploadError: false,
+                uploading: false
+            }));
+        } catch (err) {
+            console.error('COS上传失败:', err);
+            updateFile(index, (target) => ({
+                ...target,
+                uploading: false,
+                uploadError: true
+            }));
+        }
+    }, [authHeader, files, updateFile, extractCoverBase64]);
+
     const uploadSingleFile = useCallback(async (index: number) => {
         const currentFile = files[index];
         if (!currentFile || currentFile.uploadSuccess) {
@@ -228,6 +328,24 @@ export default function UploadMusic() {
         }
     }, [authHeader, files, updateFile, uploadChunk]);
 
+    const checkCosEnabled = useCallback(async (): Promise<boolean> => {
+        if (cosEnabled !== null) {
+            return cosEnabled;
+        }
+        try {
+            // 尝试请求 COS 预签名URL来检测是否启用
+            const response = await axios.post('/upload/init', {
+                filename: '__test__.mp3',
+            }, { headers: authHeader });
+            const enabled = response.status === 200 && response.data?.uploadUrl;
+            setCosEnabled(enabled);
+            return enabled;
+        } catch {
+            setCosEnabled(false);
+            return false;
+        }
+    }, [authHeader, cosEnabled]);
+
     const uploadFiles = useCallback(async () => {
         setUploading(true);
         const pendingIndexes = files
@@ -241,7 +359,15 @@ export default function UploadMusic() {
             return;
         }
 
-        await Promise.allSettled(pendingIndexes.map((index) => uploadSingleFile(index)));
+        // 检测是否启用COS
+        const useCos = await checkCosEnabled();
+        const uploadFn = useCos ? uploadSingleFileCos : uploadSingleFile;
+
+        if (useCos) {
+            setMessage('使用COS直传模式上传', 'success');
+        }
+
+        await Promise.allSettled(pendingIndexes.map((index) => uploadFn(index)));
 
         setFiles((current) => {
             const successCount = current.filter((file) => file.uploadSuccess).length;
@@ -256,7 +382,7 @@ export default function UploadMusic() {
         });
 
         setUploading(false);
-    }, [files, setMessage, uploadSingleFile]);
+    }, [files, setMessage, uploadSingleFile, uploadSingleFileCos, checkCosEnabled]);
 
     return (
         <div className="upload-music-page">

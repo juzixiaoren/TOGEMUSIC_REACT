@@ -123,6 +123,46 @@ class SQLInit:
                 VALUES (1, NULL, FALSE, FALSE);
                 """)
                 conn.commit()
+
+                # Cookie池表：存储多人共享的QQ音乐Cookie
+                cursor.execute("""
+                CREATE TABLE IF NOT EXISTS cookie_pool (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    user_label TEXT,
+                    cookie TEXT NOT NULL,
+                    uin TEXT,
+                    platform TEXT DEFAULT 'qqmusic',
+                    status TEXT DEFAULT 'active',
+                    is_vip INTEGER DEFAULT 0,
+                    use_count INTEGER DEFAULT 0,
+                    fail_count INTEGER DEFAULT 0,
+                    last_used_at TIMESTAMP,
+                    last_verified_at TIMESTAMP,
+                    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                    added_by INTEGER,
+                    FOREIGN KEY (added_by) REFERENCES users(id)
+                );
+                """)
+                conn.commit()
+
+                # 用户音乐平台登录Session表：存储用户个人登录态
+                cursor.execute("""
+                CREATE TABLE IF NOT EXISTS user_music_sessions (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    user_id INTEGER NOT NULL,
+                    platform TEXT NOT NULL DEFAULT 'qqmusic',
+                    session_data TEXT NOT NULL,
+                    uin TEXT,
+                    nickname TEXT,
+                    status TEXT DEFAULT 'active',
+                    last_used_at TIMESTAMP,
+                    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                    expires_at TIMESTAMP,
+                    FOREIGN KEY (user_id) REFERENCES users(id),
+                    UNIQUE(user_id, platform)
+                );
+                """)
+                conn.commit()
     
     def close(self):
         # connections are opened per-method using context managers; nothing to close

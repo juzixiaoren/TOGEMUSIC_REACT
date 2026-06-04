@@ -17,6 +17,7 @@ from flask_socketio import SocketIO
 from server.config import Config
 from routes.auth import auth_bp
 from routes.music import music_bp
+from routes.cookie import cookie_bp, register_cookie_tasks
 
 scheduler = None
 socketio_async_mode = os.getenv("SOCKETIO_ASYNC_MODE", "threading")
@@ -146,9 +147,20 @@ def create_app():
     # 注册蓝图
     app.register_blueprint(auth_bp)
     app.register_blueprint(music_bp)
+    app.register_blueprint(cookie_bp)
 
     # 设置定时器的回调函数
     song_scheduler.set_callback(trigger_next_song)
+
+    # 注册Cookie定时验证任务
+    try:
+        from flask_apscheduler import APScheduler as Scheduler
+        cookie_scheduler = Scheduler()
+        cookie_scheduler.init_app(app)
+        register_cookie_tasks(cookie_scheduler)
+        cookie_scheduler.start()
+    except Exception as e:
+        print(f"⚠️ Cookie定时任务注册失败: {e}")
 
     # 初始化 SocketIO（只初始化一次，避免运行模式冲突）
     print(f"✅ SocketIO init with CORS: {cors_origins}")

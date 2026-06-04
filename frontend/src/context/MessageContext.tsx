@@ -1,7 +1,7 @@
 import { createContext, useContext, useState } from "react";
 import type { ReactNode } from "react";
 import MessageBox from "../components/MessageBox/MessageBox";
-export type MessageType = "success" | "error" | "warning";
+export type MessageType = "success" | "error" | "warning" | "info";
 interface MessageContextProps {
     setMessage: ((message: string, type: MessageType) => void);
 }

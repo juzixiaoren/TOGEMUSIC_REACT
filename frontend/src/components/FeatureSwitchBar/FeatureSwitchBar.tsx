@@ -1,7 +1,7 @@
 import { useEffect } from 'react';
 import './FeatureSwitchBar.css';
 
-export type FeatureKey = 'upload' | 'playlist' | 'player';
+export type FeatureKey = 'upload' | 'playlist' | 'player' | 'music-login';
 
 type FeatureOption = {
     key: FeatureKey;
@@ -16,7 +16,8 @@ type FeatureSwitchBarProps = {
 const options: FeatureOption[] = [
     { key: 'upload', label: '上传音乐' },
     { key: 'playlist', label: '管理歌单' },
-    { key: 'player', label: '音乐播放' }
+    { key: 'player', label: '音乐播放' },
+    { key: 'music-login', label: '音乐平台' }
 ];
 
 export default function FeatureSwitchBar({ selectedKey, onChange }: FeatureSwitchBarProps) {
