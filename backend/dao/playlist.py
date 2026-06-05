@@ -31,10 +31,26 @@ class Playlist:
     def get_all_playlists(self):
         cursor = self.execute("SELECT * FROM playlists")
         return cursor.fetchall()
-    
+
+    def get_all_playlists_paginated(self, page=1, page_size=20):
+        offset = (page - 1) * page_size
+        cursor = self.execute("SELECT * FROM playlists LIMIT ? OFFSET ?", (page_size, offset))
+        items = cursor.fetchall()
+        count_cursor = self.execute("SELECT COUNT(*) FROM playlists")
+        total = count_cursor.fetchone()[0]
+        return items, total
+
     def get_default_playlists(self):
         cursor = self.execute("SELECT * FROM playlists WHERE id != 1")
         return cursor.fetchall()
+
+    def get_default_playlists_paginated(self, page=1, page_size=20):
+        offset = (page - 1) * page_size
+        cursor = self.execute("SELECT * FROM playlists WHERE id != 1 LIMIT ? OFFSET ?", (page_size, offset))
+        items = cursor.fetchall()
+        count_cursor = self.execute("SELECT COUNT(*) FROM playlists WHERE id != 1")
+        total = count_cursor.fetchone()[0]
+        return items, total
     
     def get_playlist(self, playlist_id):
         cursor = self.execute("SELECT * FROM playlists WHERE id = ?", (playlist_id,))
@@ -43,6 +59,18 @@ class Playlist:
     def create_playlist(self, user_id, name):
         self.execute("INSERT INTO playlists (creater_id, playlist_name) VALUES (?, ?)", (user_id, name))
         self.commit()
+
+    def get_or_create_all_songs_playlist(self):
+        """获取或创建"所有歌曲"歌单，返回其id"""
+        cursor = self.execute("SELECT id FROM playlists WHERE playlist_name = '所有歌曲' LIMIT 1")
+        row = cursor.fetchone()
+        if row:
+            return row['id']
+        self.execute("INSERT INTO playlists (creater_id, playlist_name) VALUES (1, '所有歌曲')")
+        self.commit()
+        cursor = self.execute("SELECT id FROM playlists WHERE playlist_name = '所有歌曲' LIMIT 1")
+        row = cursor.fetchone()
+        return row['id'] if row else None
     
     def get_playlist_songs(self, playlist_id):
         cursor = self.execute("""
@@ -52,6 +80,23 @@ class Playlist:
             ORDER BY ps.order_index
         """, (playlist_id,))
         return cursor.fetchall()
+
+    def get_playlist_songs_paginated(self, playlist_id, page=1, page_size=20):
+        offset = (page - 1) * page_size
+        cursor = self.execute("""
+            SELECT s.* FROM songs s
+            JOIN playlist_songs ps ON s.id = ps.song_id
+            WHERE ps.playlist_id = ?
+            ORDER BY ps.order_index
+            LIMIT ? OFFSET ?
+        """, (playlist_id, page_size, offset))
+        items = cursor.fetchall()
+        count_cursor = self.execute(
+            "SELECT COUNT(*) FROM playlist_songs WHERE playlist_id = ?",
+            (playlist_id,)
+        )
+        total = count_cursor.fetchone()[0]
+        return items, total
     
     def add_song_to_playlist(self, playlist_id, song_id):
         # Get max order_index

@@ -95,6 +95,23 @@ def get_cos_public_url(cos_key: str) -> str:
     return f"https://{_COS_BUCKET}.cos.{_COS_REGION}.myqcloud.com/{cos_key}"
 
 
+def delete_cos_object(cos_key: str) -> bool:
+    """
+    删除 COS 对象。
+    返回 True 表示成功，False 表示失败。
+    """
+    try:
+        client = _get_client()
+        client.delete_object(
+            Bucket=_COS_BUCKET,
+            Key=cos_key,
+        )
+        return True
+    except Exception as e:
+        print(f"删除 COS 对象失败: {e}")
+        return False
+
+
 def extract_cos_key_from_path(stored_path: str) -> str:
     """
     从数据库存储的 file_path 中提取 COS key。

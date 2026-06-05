@@ -32,10 +32,11 @@ class Song:
         cursor = self.execute("SELECT * FROM songs WHERE id = ?", (song_id,))
         return cursor.fetchone()
     
-    def add_song(self, title, artist, duration, file_path, uploader_id, file_extension):
-        self.execute("INSERT INTO songs (title, artist, duration, file_path, uploader_id, file_extension) VALUES (?, ?, ?, ?, ?, ?)",
-                     (title, artist, duration, file_path, uploader_id, file_extension))
+    def add_song(self, title, artist, duration, file_path, uploader_id, file_extension, platform='local', platform_song_id=None):
+        cursor = self.execute("INSERT INTO songs (title, artist, duration, file_path, uploader_id, file_extension, platform, platform_song_id) VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
+                     (title, artist, duration, file_path, uploader_id, file_extension, platform, platform_song_id))
         self.commit()
+        return cursor.lastrowid
     def get_play_status(self):
         cursor = self.execute("""
                             SELECT play_start_time ,is_playing,song_id
@@ -51,6 +52,18 @@ class Song:
                     SET play_start_time = ?, is_playing = ?
                     """, (play_start_time, is_playing))
         self.commit()
+    def delete_song(self, song_id):
+        """永久删除歌曲：移除所有歌单关联，删除歌曲记录。返回歌曲信息（用于清理COS文件）"""
+        song = self.get_song_by_id(song_id)
+        if not song:
+            return None
+        # 先删除所有歌单关联
+        self.execute("DELETE FROM playlist_songs WHERE song_id = ?", (song_id,))
+        # 再删除歌曲记录
+        self.execute("DELETE FROM songs WHERE id = ?", (song_id,))
+        self.commit()
+        return dict(song)
+
     def get_song_duration(self, song_id):
         cursor = self.execute("SELECT duration FROM songs WHERE id = ?", (song_id,))
         result = cursor.fetchone()

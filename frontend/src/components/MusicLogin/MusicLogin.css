@@ -61,12 +61,18 @@
 /* Cookie状态 */
 .cookie-status {
     display: flex;
-    align-items: center;
+    flex-direction: column;
     gap: 8px;
     padding: 12px 16px;
     background: #f8f9fa;
     border-radius: 8px;
     margin-bottom: 20px;
+}
+
+.cookie-summary {
+    display: flex;
+    align-items: center;
+    gap: 8px;
 }
 
 .cookie-label {
@@ -78,6 +84,29 @@
     font-size: 14px;
     font-weight: 600;
     color: #31c27c;
+}
+
+.cookie-details {
+    display: flex;
+    gap: 16px;
+    flex-wrap: wrap;
+}
+
+.cookie-detail-item {
+    display: flex;
+    align-items: center;
+    gap: 4px;
+}
+
+.platform-label {
+    font-size: 13px;
+    font-weight: 500;
+    color: #555;
+}
+
+.detail-info {
+    font-size: 13px;
+    color: #666;
 }
 
 .vip-badge {
@@ -183,6 +212,16 @@
 .login-btn.qqmusic:hover {
     transform: translateY(-2px);
     box-shadow: 0 6px 20px rgba(49, 194, 124, 0.4);
+}
+
+.login-btn.netease {
+    background: linear-gradient(135deg, #c20c0c 0%, #e63946 100%);
+    color: white;
+}
+
+.login-btn.netease:hover {
+    transform: translateY(-2px);
+    box-shadow: 0 6px 20px rgba(194, 12, 12, 0.4);
 }
 
 .login-btn:disabled {
@@ -303,6 +342,43 @@
 .import-btn:disabled {
     opacity: 0.6;
     cursor: not-allowed;
+}
+
+/* 歌单分页 */
+.playlist-pagination {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 16px;
+    margin-top: 16px;
+    padding-top: 16px;
+    border-top: 1px solid #eee;
+}
+
+.page-btn {
+    padding: 8px 16px;
+    border: 1px solid #ddd;
+    border-radius: 6px;
+    background: white;
+    color: #333;
+    font-size: 14px;
+    cursor: pointer;
+    transition: all 0.2s ease;
+}
+
+.page-btn:hover:not(:disabled) {
+    border-color: #31c27c;
+    color: #31c27c;
+}
+
+.page-btn:disabled {
+    opacity: 0.5;
+    cursor: not-allowed;
+}
+
+.page-info {
+    font-size: 14px;
+    color: #666;
 }
 
 /* 系统登录提示 */

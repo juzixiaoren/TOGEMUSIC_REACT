@@ -5,6 +5,7 @@ from dao.song import Song
 from dao.playlist import Playlist
 from dao.user import User
 from utils.qqmusic_tool import QQMusicTool
+from utils.netease_tool import NeteaseMusicTool
 from utils.song_scheduler import song_scheduler
 from utils.cos_storage import (
     is_cos_enabled,
@@ -41,6 +42,14 @@ song_model = Song()
 playlist_model = Playlist()
 user_model = User()
 
+_ALL_SONGS_PLAYLIST_ID = None
+
+def _all_songs_id():
+    global _ALL_SONGS_PLAYLIST_ID
+    if _ALL_SONGS_PLAYLIST_ID is None:
+        _ALL_SONGS_PLAYLIST_ID = playlist_model.get_or_create_all_songs_playlist()
+    return _ALL_SONGS_PLAYLIST_ID
+
 # 针对音频流式播放的分块大小（字节）
 STREAM_CHUNK_SIZE = 1024 * 1024
 
@@ -54,6 +63,8 @@ UPLOAD_SESSIONS = {}
 FLAC_BLOCK_SIZE = 4096
 QQ_IMPORT_PLAYLIST_NAME = 'QQ音乐导入歌单'
 QQ_TITLE_SUFFIX = '[qq]'
+NET_IMPORT_PLAYLIST_NAME = '网易云音乐导入歌单'
+NET_TITLE_SUFFIX = '[netease]'
 
 
 def _normalize_qq_title(raw_title: str) -> str:
@@ -63,6 +74,15 @@ def _normalize_qq_title(raw_title: str) -> str:
     if title.endswith(QQ_TITLE_SUFFIX):
         return title
     return f'{title}{QQ_TITLE_SUFFIX}'
+
+
+def _normalize_netease_title(raw_title: str) -> str:
+    title = (raw_title or '').strip()
+    if not title:
+        return title
+    if title.endswith(NET_TITLE_SUFFIX):
+        return title
+    return f'{title}{NET_TITLE_SUFFIX}'
 
 
 def _ensure_playlist_id_by_name(user_id: int, playlist_name: str) -> int:
@@ -370,6 +390,35 @@ def _create_qqmusic_tool(user_id: int = None) -> QQMusicTool:
     return QQMusicTool(cookie_header=cookie_header, timeout=15)
 
 
+def _create_netease_tool(user_id: int = None) -> NeteaseMusicTool:
+    """
+    创建网易云音乐工具实例，Cookie来源优先级：
+    1. 用户个人登录Session（用于获取用户个人歌单等）
+    2. Cookie池随机选取（共享，用于搜索、播放等）
+    3. 环境变量 NETEASE_COOKIE（兜底）
+    4. 请求头 X-Netease-Cookie（兼容旧版）
+    """
+    cookie = ''
+
+    # 如果指定了用户ID，优先使用用户个人session
+    if user_id:
+        cookie = user_session_model.get_session_data(user_id, 'netease') or ''
+
+    # 其次从Cookie池随机选取
+    if not cookie:
+        cookie = cookie_pool.pick_random_cookie('netease') or ''
+
+    # 兜底：环境变量
+    if not cookie:
+        cookie = (os.getenv('NETEASE_COOKIE') or '').strip()
+
+    # 兼容旧版前端透传
+    if not cookie:
+        cookie = (request.headers.get('X-Netease-Cookie') or '').strip()
+
+    return NeteaseMusicTool(cookie=cookie, timeout=15)
+
+
 def _extract_play_url(payload: dict):
     if not isinstance(payload, dict):
         return None
@@ -412,6 +461,27 @@ def _extract_songmid_from_song(song: dict):
         if match:
             return match.group(1)
     return None
+
+
+def _is_netease_song(song: dict) -> bool:
+    title = str((song or {}).get('title') or '')
+    file_path = str((song or {}).get('file_path') or '')
+    return title.endswith('[netease]') or ('music.163.com' in file_path and file_path.startswith('http'))
+
+
+def _extract_netease_id_from_song(song: dict):
+    file_path = str((song or {}).get('file_path') or '')
+    if not file_path:
+        return None
+    import re
+    match = re.search(r'id=(\d+)', file_path)
+    if match:
+        return match.group(1)
+    match = re.search(r'/(\d+)\.(?:mp3|flac|m4a)', file_path)
+    if match:
+        return match.group(1)
+    return None
+
 
 @music_bp.route('/upload', methods=['POST'])
 def upload_music():
@@ -476,7 +546,13 @@ def upload_music():
             duration = durations[i] if i < len(durations) else 0
 
             print(f"Saving song: {title}, {artist}, {duration}ms, {file_path}")
-            song_model.add_song(title, artist, duration, file_path, user_id, file_extension)
+            sid = song_model.add_song(title, artist, duration, file_path, user_id, file_extension)
+            # 自动加入"所有歌曲"歌单
+            if sid:
+                try:
+                    playlist_model.add_song_to_playlist(_all_songs_id(), sid)
+                except Exception:
+                    pass
 
     return jsonify({'message': 'Upload successful'}), 200
 
@@ -526,17 +602,28 @@ def upload_complete():
     duration = int(data.get('duration', 0))
     file_extension = data.get('fileExtension', '')
     cover_base64 = data.get('coverBase64')  # 可选：前端提取的封面 base64
+    playlist_id = data.get('playlistId')  # 可选：上传后自动加入歌单
 
     if not cos_key:
         return jsonify({'message': 'cosKey is required'}), 400
 
     # 存入数据库：file_path 存 "cos:xxx" 格式
-    song_model.add_song(title, artist, duration, cos_key, user_id, file_extension)
+    song_id = song_model.add_song(title, artist, duration, cos_key, user_id, file_extension)
 
-    # 如果有封面数据，可以后续扩展存入单独的表或字段
-    # 当前先不存，封面提取仍走按需下载逻辑
+    # 自动加入"所有歌曲"歌单
+    if song_id:
+        try:
+            playlist_model.add_song_to_playlist(_all_songs_id(), song_id)
+        except Exception:
+            pass
+    # 如果指定了歌单，自动加入
+    if playlist_id and song_id:
+        try:
+            playlist_model.add_song_to_playlist(playlist_id, song_id)
+        except Exception as e:
+            print(f'自动加入歌单失败: {e}')
 
-    return jsonify({'message': 'Upload recorded successfully', 'cosKey': cos_key}), 200
+    return jsonify({'message': 'Upload recorded successfully', 'cosKey': cos_key, 'songId': song_id}), 200
 
 
 @music_bp.route('/songs', methods=['GET'])
@@ -584,6 +671,66 @@ def qqmusic_search():
     except Exception as e:
         return jsonify({'message': f'QQMusic API search failed: {str(e)}'}), 502
 
+
+@music_bp.route('/netease/search', methods=['GET'])
+def netease_search():
+    token = request.headers.get('Authorization')
+    user_id = verify_token(token)
+    if not user_id:
+        return jsonify({'message': 'Invalid token'}), 401
+
+    key = (request.args.get('key') or '').strip()
+    if not key:
+        return jsonify({'message': 'key is required'}), 400
+
+    page_no = int(request.args.get('pageNo', '1'))
+    page_size = int(request.args.get('pageSize', '20'))
+    netease = _create_netease_tool()
+    try:
+        # 网易云搜索API参数：offset = (page_no - 1) * page_size
+        offset = (page_no - 1) * page_size
+        result = netease.search(keyword=key, limit=page_size, offset=offset)
+        
+        # 从 result 中提取 songs 列表
+        raw_songs = result.get('songs', []) if isinstance(result, dict) else []
+        
+        # 格式化歌曲列表
+        formatted_songs = []
+        for song in raw_songs:
+            # song 可能是原始格式（有 ar/al 字段）或简化格式
+            artists = ''
+            if 'ar' in song:
+                artists = '/'.join([a.get('name', '') for a in song.get('ar', [])])
+            elif 'artist' in song:
+                artists = song.get('artist', '')
+            
+            album_info = song.get('al', {})
+            album_name = album_info.get('name', '') if isinstance(album_info, dict) else song.get('album', '')
+            cover_url = album_info.get('picUrl', '') if isinstance(album_info, dict) else song.get('cover', '')
+            
+            formatted_songs.append({
+                'songmid': str(song.get('id', '')),
+                'title': song.get('name', ''),
+                'artist': artists,
+                'duration': song.get('dt', 0),
+                'album': album_name,
+                'cover': cover_url,
+            })
+
+        return jsonify({
+            'result': 100,
+            'data': {
+                'list': formatted_songs,
+                'pageNo': page_no,
+                'pageSize': page_size,
+                'total': len(formatted_songs),
+                'key': key,
+                't': 0,
+                'type': 'song',
+            }
+        }), 200
+    except Exception as e:
+        return jsonify({'message': f'Netease API search failed: {str(e)}'}), 502
 
 
 
@@ -641,9 +788,10 @@ def qqmusic_import_song():
     except Exception as e:
         return jsonify({'message': f'QQMusic import failed: {str(e)}'}), 500
 
+    # 检查是否已存在相同platform_song_id的QQ音乐歌曲
     exists = song_model.execute(
-        'SELECT id FROM songs WHERE title = ? AND artist = ? LIMIT 1',
-        (title, artist)
+        'SELECT id FROM songs WHERE platform = ? AND platform_song_id = ? LIMIT 1',
+        ('qqmusic', songmid)
     ).fetchone()
     if exists:
         if add_to_playlist:
@@ -652,22 +800,29 @@ def qqmusic_import_song():
                 playlist_model.add_song_to_playlist(target_playlist_id, exists['id'])
             except Exception:
                 pass
-        return jsonify({'message': 'Song already exists', 'songId': exists['id'], 'playUrl': play_url}), 200
+        return jsonify({'message': 'Song already exists', 'songId': exists['id'], 'songmid': songmid}), 200
 
-    file_extension = _guess_ext_from_url(play_url, audio_type)
-    song_model.add_song(title, artist, duration, play_url, user_id, file_extension)
-    created = song_model.execute('SELECT id FROM songs WHERE title = ? AND artist = ? LIMIT 1', (title, artist)).fetchone()
-    if created and add_to_playlist:
-        target_playlist_id = _ensure_playlist_id_by_name(user_id, QQ_IMPORT_PLAYLIST_NAME)
+    # 保存歌曲信息，不保存播放URL，而是保存songmid用于动态获取
+    file_extension = audio_type  # 使用请求的音频类型作为扩展名
+    song_model.add_song(title, artist, duration, '', user_id, file_extension, platform='qqmusic', platform_song_id=songmid)
+    created = song_model.execute('SELECT id FROM songs WHERE platform = ? AND platform_song_id = ? LIMIT 1', ('qqmusic', songmid)).fetchone()
+    if created:
+        # 自动加入"所有歌曲"歌单
         try:
-            playlist_model.add_song_to_playlist(target_playlist_id, created['id'])
+            playlist_model.add_song_to_playlist(_all_songs_id(), created['id'])
         except Exception:
             pass
+        if add_to_playlist:
+            target_playlist_id = _ensure_playlist_id_by_name(user_id, QQ_IMPORT_PLAYLIST_NAME)
+            try:
+                playlist_model.add_song_to_playlist(target_playlist_id, created['id'])
+            except Exception:
+                pass
 
     return jsonify({
         'message': 'Imported successfully',
         'songId': created['id'] if created else None,
-        'playUrl': play_url,
+        'songmid': songmid,
         'fileExtension': file_extension
     }), 201
 
@@ -702,6 +857,118 @@ def qqmusic_cover(song_id):
     except Exception as e:
         return jsonify({'message': f'QQMusic cover fetch failed: {str(e)}'}), 500
 
+
+@music_bp.route('/netease/import', methods=['POST'])
+def netease_import_song():
+    token = request.headers.get('Authorization')
+    user_id = verify_token(token)
+    if not user_id:
+        return jsonify({'message': 'Invalid token'}), 401
+
+    data = request.get_json() or {}
+    song_id = (data.get('songmid') or '').strip()
+    if not song_id:
+        return jsonify({'message': 'songmid (song id) is required'}), 400
+
+    title = _normalize_netease_title((data.get('title') or song_id))
+    artist = (data.get('artist') or '').strip()
+    duration = int(data.get('duration') or 0)
+    add_to_playlist = bool(data.get('addToPlaylist', True))
+
+    netease = _create_netease_tool()
+
+    try:
+        # 网易云搜索和播放URL获取
+        song_data = netease.get_song_url(int(song_id))
+        play_url = song_data.get('url') if isinstance(song_data, dict) else None
+
+        if not play_url:
+            # 尝试使用VIP Cookie
+            vip_result = cookie_pool.pick_vip_cookie_with_id('netease')
+            if vip_result:
+                vip_cookie, vip_cookie_id = vip_result
+                vip_netease = NeteaseMusicTool(cookie=vip_cookie, timeout=15)
+                try:
+                    song_data = vip_netease.get_song_url(int(song_id))
+                    play_url = song_data.get('url') if isinstance(song_data, dict) else None
+                    if play_url:
+                        cookie_pool.record_success(vip_cookie_id)
+                        print(f"✅ VIP Cookie重试成功，song_id={song_id}")
+                except Exception as e:
+                    print(f"⚠️ VIP Cookie重试也失败: {e}")
+
+        if not play_url:
+            return jsonify({'message': 'No playable url returned from Netease API (tried VIP cookie)'}), 502
+
+    except Exception as e:
+        return jsonify({'message': f'Netease import failed: {str(e)}'}), 500
+
+    exists = song_model.execute(
+        'SELECT id FROM songs WHERE platform = ? AND platform_song_id = ? LIMIT 1',
+        ('netease', song_id)
+    ).fetchone()
+    if exists:
+        if add_to_playlist:
+            target_playlist_id = _ensure_playlist_id_by_name(user_id, NET_IMPORT_PLAYLIST_NAME)
+            try:
+                playlist_model.add_song_to_playlist(target_playlist_id, exists['id'])
+            except Exception:
+                pass
+        return jsonify({'message': 'Song already exists', 'songId': exists['id'], 'songmid': song_id}), 200
+
+    # 保存歌曲信息，不保存播放URL，而是保存song_id用于动态获取
+    file_extension = 'mp3'
+    song_model.add_song(title, artist, duration, '', user_id, file_extension, platform='netease', platform_song_id=song_id)
+    created = song_model.execute('SELECT id FROM songs WHERE platform = ? AND platform_song_id = ? LIMIT 1', ('netease', song_id)).fetchone()
+    if created:
+        # 自动加入"所有歌曲"歌单
+        try:
+            playlist_model.add_song_to_playlist(_all_songs_id(), created['id'])
+        except Exception:
+            pass
+        if add_to_playlist:
+            target_playlist_id = _ensure_playlist_id_by_name(user_id, NET_IMPORT_PLAYLIST_NAME)
+            try:
+                playlist_model.add_song_to_playlist(target_playlist_id, created['id'])
+            except Exception:
+                pass
+
+    return jsonify({
+        'message': 'Imported successfully',
+        'songId': created['id'] if created else None,
+        'songmid': song_id,
+        'fileExtension': file_extension
+    }), 201
+
+
+@music_bp.route('/songs/check-platform', methods=['POST'])
+def check_platform_songs():
+    """批量检查平台歌曲是否已存在于数据库中"""
+    token = request.headers.get('Authorization')
+    user_id = verify_token(token)
+    if not user_id:
+        return jsonify({'message': 'Invalid token'}), 401
+
+    data = request.get_json() or {}
+    checks = data.get('checks', [])  # [{'platform': 'qqmusic', 'platform_song_id': 'xxx'}, ...]
+
+    results = {}
+    for item in checks:
+        platform = item.get('platform', '')
+        platform_song_id = item.get('platform_song_id', '')
+        if not platform or not platform_song_id:
+            continue
+        key = f"{platform}:{platform_song_id}"
+        exists = song_model.execute(
+            'SELECT id FROM songs WHERE platform = ? AND platform_song_id = ? LIMIT 1',
+            (platform, platform_song_id)
+        ).fetchone()
+        if exists:
+            results[key] = exists['id']
+
+    return jsonify({'exists': results}), 200
+
+
 @music_bp.route('/playlists', methods=['GET'])
 def get_playlists():
     token = request.headers.get('Authorization')
@@ -716,8 +983,20 @@ def get_all_playlists():
     user_id = verify_token(token)
     if user_id is None:
         return jsonify({'message': 'Invalid token'}), 401
-    playlists = playlist_model.get_all_playlists()
-    return jsonify([dict(p) for p in playlists]), 200
+
+    page = request.args.get('page', 1, type=int)
+    page_size = request.args.get('page_size', 20, type=int)
+    page = max(1, page)
+    page_size = max(1, min(100, page_size))
+
+    playlists, total = playlist_model.get_all_playlists_paginated(page, page_size)
+    return jsonify({
+        'items': [dict(p) for p in playlists],
+        'total': total,
+        'page': page,
+        'page_size': page_size,
+        'total_pages': (total + page_size - 1) // page_size
+    }), 200
 @music_bp.route('/playlists', methods=['POST'])
 def create_playlist():
     token = request.headers.get('Authorization')
@@ -730,10 +1009,20 @@ def create_playlist():
 @music_bp.route('/playlists/<int:playlist_id>', methods=['GET'])
 def get_playlist(playlist_id):
     playlist = playlist_model.get_playlist(playlist_id)
-    songs = playlist_model.get_playlist_songs(playlist_id)
+
+    page = request.args.get('page', 1, type=int)
+    page_size = request.args.get('page_size', 20, type=int)
+    page = max(1, page)
+    page_size = max(1, min(100, page_size))
+
+    songs, total = playlist_model.get_playlist_songs_paginated(playlist_id, page, page_size)
     return jsonify({
         'playlist': dict(playlist),
-        'songs': [dict(s) for s in songs]
+        'songs': [dict(s) for s in songs],
+        'total': total,
+        'page': page,
+        'page_size': page_size,
+        'total_pages': (total + page_size - 1) // page_size
     }), 200
 
 @music_bp.route('/playlists/<int:playlist_id>/songs', methods=['POST'])
@@ -780,6 +1069,38 @@ def remove_song_from_playlist(playlist_id, song_id):
     playlist_model.remove_song_from_playlist(playlist_id, song_id)
     return jsonify({'message': 'Song removed'}), 200
 
+
+@music_bp.route('/songs/<int:song_id>', methods=['DELETE'])
+def delete_song_permanently(song_id):
+    """永久删除歌曲：从数据库删除记录，并清理COS文件"""
+    token = request.headers.get('Authorization')
+    user_id = verify_token(token)
+    if not user_id:
+        return jsonify({'message': 'Invalid token'}), 401
+
+    song = song_model.get_song_by_id(song_id)
+    if not song:
+        return jsonify({'message': 'Song not found'}), 404
+
+    stored_path = song['file_path'] if isinstance(song, dict) else song[5]
+
+    # 从数据库删除（包括所有歌单关联）
+    deleted = song_model.delete_song(song_id)
+    if not deleted:
+        return jsonify({'message': 'Delete failed'}), 500
+
+    # 如果是COS存储，删除COS对象
+    if stored_path and isinstance(stored_path, str) and stored_path.startswith('cos:'):
+        try:
+            from utils.cos_storage import delete_cos_object, extract_cos_key_from_path
+            cos_key = extract_cos_key_from_path(stored_path)
+            delete_cos_object(cos_key)
+        except Exception as e:
+            print(f'删除COS文件失败（不影响歌曲删除）: {e}')
+
+    return jsonify({'message': 'Song deleted permanently'}), 200
+
+
 @music_bp.route('/songs/<int:song_id>/file.<ext>', methods=['GET'])
 def get_song_file(song_id, ext):
     song = song_model.get_song_by_id(song_id)
@@ -788,6 +1109,69 @@ def get_song_file(song_id, ext):
 
     # song[5] is the stored file path. It might be a Windows path, a remote URL, or a COS key.
     stored_path = song[5]
+    
+    # 检查是否是网易云歌曲（platform字段在song[7]，platform_song_id在song[8]）
+    platform = song[7] if len(song) > 7 else 'local'
+    platform_song_id = song[8] if len(song) > 8 else None
+    
+    # 如果是网易云歌曲且没有存储的URL，动态获取播放链接
+    if platform == 'netease' and platform_song_id and (not stored_path or stored_path == 'None'):
+        try:
+            netease = _create_netease_tool()
+            song_data = netease.get_song_url(int(platform_song_id))
+            # get_song_url 返回的是 {'id':..., 'url':..., ...} 字典，需要提取 url 字段
+            play_url = song_data.get('url') if isinstance(song_data, dict) else None
+            
+            # 如果普通Cookie获取失败，尝试VIP Cookie
+            if not play_url:
+                vip_result = cookie_pool.pick_vip_cookie_with_id('netease')
+                if vip_result:
+                    vip_cookie, vip_cookie_id = vip_result
+                    vip_netease = NeteaseMusicTool(cookie=vip_cookie, timeout=15)
+                    try:
+                        song_data = vip_netease.get_song_url(int(platform_song_id))
+                        play_url = song_data.get('url') if isinstance(song_data, dict) else None
+                        if play_url:
+                            cookie_pool.record_success(vip_cookie_id)
+                    except Exception as e:
+                        print(f"⚠️ VIP Cookie重试也失败: {e}")
+            
+            if play_url:
+                return jsonify({'url': play_url}), 302, {'Location': play_url}
+            else:
+                abort(502, description='Failed to get play URL from Netease API')
+        except Exception as e:
+            print(f"获取网易云播放URL失败: {e}")
+            abort(500, description='Failed to get Netease play URL')
+
+    # 如果是QQ音乐歌曲且没有存储的URL，动态获取播放链接
+    if platform == 'qqmusic' and platform_song_id and (not stored_path or stored_path == 'None' or stored_path == ''):
+        try:
+            qqmusic = _create_qqmusic_tool()
+            payload = qqmusic.get_music_url(songmid=platform_song_id, quality='m4a', origin=True)
+            play_url = _extract_play_url(payload)
+
+            # 如果普通Cookie获取失败，尝试VIP Cookie
+            if not play_url:
+                vip_result = cookie_pool.pick_vip_cookie_with_id('qqmusic')
+                if vip_result:
+                    vip_cookie, vip_cookie_id = vip_result
+                    vip_qqmusic = QQMusicTool(cookie_header=vip_cookie, timeout=15)
+                    try:
+                        payload = vip_qqmusic.get_music_url(songmid=platform_song_id, quality='m4a', origin=True)
+                        play_url = _extract_play_url(payload)
+                        if play_url:
+                            cookie_pool.record_success(vip_cookie_id)
+                    except Exception as e:
+                        print(f"⚠️ VIP Cookie重试也失败: {e}")
+
+            if play_url:
+                return jsonify({'url': play_url}), 302, {'Location': play_url}
+            else:
+                abort(502, description='Failed to get play URL from QQMusic API')
+        except Exception as e:
+            print(f"获取QQ音乐播放URL失败: {e}")
+            abort(500, description='Failed to get QQMusic play URL')
 
     # COS 对象：生成预签名下载URL并重定向
     if isinstance(stored_path, str) and stored_path.startswith('cos:'):
@@ -876,6 +1260,26 @@ def get_song_cover(song_id):
     stored_path = song[5]
     file_extension = song[6]  # song[6] 是文件扩展名
     
+    # 检查是否是网易云歌曲
+    platform = song[7] if len(song) > 7 else 'local'
+    platform_song_id = song[8] if len(song) > 8 else None
+    
+    # 如果是网易云歌曲，从API获取封面
+    if platform == 'netease' and platform_song_id:
+        try:
+            netease = _create_netease_tool()
+            song_details = netease.get_song_detail([int(platform_song_id)])
+            if song_details and len(song_details) > 0:
+                song_info = song_details[0]
+                # 网易云歌曲详情中 al.picUrl 是专辑封面URL
+                album_info = song_info.get('al', {})
+                cover_url = album_info.get('picUrl', '')
+                if cover_url:
+                    return jsonify({'cover': cover_url}), 200
+        except Exception as e:
+            print(f"获取网易云封面失败: {e}")
+        return jsonify({'cover': None}), 200
+    
     cover_data = None
     
     # 处理 COS 存储的文件
@@ -902,7 +1306,7 @@ def get_song_cover(song_id):
         except Exception as e:
             print(f"从COS下载文件提取封面失败: {e}")
             return jsonify({'cover': None}), 500
-    else:
+    elif stored_path:
         # 本地文件
         if '\\' in stored_path:
             filename = stored_path.split('\\')[-1]
@@ -1080,7 +1484,7 @@ def merge_chunks():
             _optimize_flac_file(output_path)
         
         # 将文件信息保存到数据库
-        song_model.add_song(
+        song_id = song_model.add_song(
             session['title'],
             session['artist'],
             session['duration'],
@@ -1088,13 +1492,27 @@ def merge_chunks():
             user_id,
             file_ext
         )
+
+        # 自动加入"所有歌曲"歌单
+        if song_id:
+            try:
+                playlist_model.add_song_to_playlist(_all_songs_id(), song_id)
+            except Exception:
+                pass
+        # 如果指定了歌单，自动加入
+        playlist_id = data.get('playlistId')
+        if playlist_id and song_id:
+            try:
+                playlist_model.add_song_to_playlist(playlist_id, song_id)
+            except Exception as e:
+                print(f'自动加入歌单失败: {e}')
         
         # 清理临时目录
         shutil.rmtree(session['session_dir'])
         _clear_upload_session(session_id)
         
         print(f"成功合并文件：{session['filename']}")
-        return jsonify({'message': 'File merged successfully'}), 200
+        return jsonify({'message': 'File merged successfully', 'songId': song_id}), 200
     
     except Exception as e:
         print(f"合并失败：{e}")
@@ -1170,7 +1588,7 @@ def request_play():
 def clear_playlist():
     """清空播放列表，取消定时器"""
     playlist_model.clear_playlist(1)
-    song_scheduler.cancel_current(reason="播放列表已清空")  # 取消定时器
+    song_scheduler.cancel_current()  # 取消定时器
     return jsonify({'message': 'Playlist cleared', 'success': True}), 200
 
 @music_bp.route('/removesongfromplaylist', methods=['POST'])

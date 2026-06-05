@@ -2,7 +2,7 @@ import { useState, useEffect, useCallback, useMemo } from 'react';
 import axios from 'axios';
 import { useMessage } from '../../context/MessageContext';
 
-type Platform = 'qqmusic';
+type Platform = 'qqmusic' | 'netease';
 
 type PlatformStatus = {
     platform: Platform;
@@ -20,17 +20,17 @@ type PlatformPlaylist = {
 };
 
 type PlatformSong = {
-    songmid: string;
+    songmid?: string;      // QQ音乐
+    song_id?: string | number; // 网易云音乐
     title: string;
     artist: string;
-    album: string;
+    album?: string;
     duration: number;
 };
 
 const platformConfig: Record<Platform, { name: string; icon: string }> = {
     qqmusic: { name: 'QQ音乐', icon: '🎵' },
-    // netease 和 kugou 暂未实现
-    // netease: { name: '网易云音乐', icon: '🎶' },
+    netease: { name: '网易云音乐', icon: '🎶' },
     // kugou: { name: '酷狗音乐', icon: '🎤' },
 };
 
@@ -104,6 +104,11 @@ export default function PlatformPlaylistImport({
         }
     }, [authHeader, setMessage]);
 
+    // 获取歌曲唯一ID（兼容不同平台字段名）
+    const getSongId = (song: PlatformSong): string => {
+        return String(song.songmid || song.song_id || '');
+    };
+
     // 获取歌单中的歌曲
     const fetchPlaylistSongs = useCallback(async (platform: Platform, playlistId: string) => {
         setLoadingSongs(true);
@@ -112,8 +117,9 @@ export default function PlatformPlaylistImport({
                 params: { playlist_id: playlistId },
                 headers: authHeader,
             });
-            setSongs(resp.data.songs || []);
-            setSelectedSongmids(resp.data.songs.map((s: PlatformSong) => s.songmid));
+            const songsData: PlatformSong[] = resp.data.songs || [];
+            setSongs(songsData);
+            setSelectedSongmids(songsData.map((s: PlatformSong) => getSongId(s)));
             setStep('select-songs');
         } catch (error: unknown) {
             const err = error as { response?: { data?: { message?: string } } };
@@ -157,7 +163,7 @@ export default function PlatformPlaylistImport({
         if (selectedSongmids.length === songs.length) {
             setSelectedSongmids([]);
         } else {
-            setSelectedSongmids(songs.map((s) => s.songmid));
+            setSelectedSongmids(songs.map((s) => getSongId(s)));
         }
     };
 
@@ -170,13 +176,15 @@ export default function PlatformPlaylistImport({
 
         setImporting(true);
         try {
-            // 逐个导入歌曲（使用现有的qqmusic/import接口）
             let imported = 0;
             let failed = 0;
 
-            for (const songmid of selectedSongmids) {
+            // 根据平台选择对应的导入接口
+            const importEndpoint = activePlatform === 'qqmusic' ? '/qqmusic/import' : '/netease/import';
+
+            for (const songId of selectedSongmids) {
                 try {
-                    await axios.post('/qqmusic/import', { songmid }, { headers: authHeader });
+                    await axios.post(importEndpoint, { songmid: songId }, { headers: authHeader });
                     imported++;
                 } catch {
                     failed++;
@@ -296,19 +304,22 @@ export default function PlatformPlaylistImport({
                                 <div className="empty-text">歌单为空</div>
                             ) : (
                                 <div className="song-list">
-                                    {songs.map((song) => (
-                                        <label key={song.songmid} className="song-item">
-                                            <input
-                                                type="checkbox"
-                                                checked={selectedSongmids.includes(song.songmid)}
-                                                onChange={() => toggleSong(song.songmid)}
-                                            />
-                                            <div className="song-info">
-                                                <div className="song-title">{song.title}</div>
-                                                <div className="song-artist">{song.artist}</div>
-                                            </div>
-                                        </label>
-                                    ))}
+                                    {songs.map((song) => {
+                                        const songId = getSongId(song);
+                                        return (
+                                            <label key={songId} className="song-item">
+                                                <input
+                                                    type="checkbox"
+                                                    checked={selectedSongmids.includes(songId)}
+                                                    onChange={() => toggleSong(songId)}
+                                                />
+                                                <div className="song-info">
+                                                    <div className="song-title">{song.title}</div>
+                                                    <div className="song-artist">{song.artist}</div>
+                                                </div>
+                                            </label>
+                                        );
+                                    })}
                                 </div>
                             )}
                         </div>

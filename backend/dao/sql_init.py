@@ -37,8 +37,10 @@ class SQLInit:
             artist TEXT,
             duration INTEGER,
             uploader_id INTEGER,
-            file_path TEXT NOT NULL,
+            file_path TEXT,
             file_extension TEXT,
+            platform TEXT DEFAULT 'local',
+            platform_song_id TEXT,
             time_added TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
             UNIQUE(title, artist),
             FOREIGN KEY (uploader_id) REFERENCES users(id)
@@ -108,6 +110,7 @@ class SQLInit:
                 conn.commit()
                 # 插入默认歌单
                 cursor.execute("INSERT OR IGNORE INTO playlists (id, creater_id, playlist_name) VALUES (1, 1, '默认播放列表')")
+                cursor.execute("INSERT OR IGNORE INTO playlists (creater_id, playlist_name) VALUES (1, '所有歌曲')")
                 conn.commit()
                 cursor.execute("""
                 CREATE TABLE room_play_state (

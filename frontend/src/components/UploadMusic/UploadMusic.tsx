@@ -1,25 +1,70 @@
 import axios from 'axios';
 import { parseBlob } from 'music-metadata-browser';
-import { useCallback, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 import { useMessage } from '../../context/MessageContext';
 import UploadDropzone from './UploadDropzone';
 import UploadFileTable from './UploadFileTable';
 import type { UploadFileItem } from './types';
 import './UploadMusic.css';
-import QQMusicFun from '../../QQMusicApi/QQMusicFun';
 
 const CHUNK_SIZE = 5 * 1024 * 1024;
 const MAX_CONCURRENT_CHUNKS = 3;
+
+type PlaylistOption = {
+    id: number;
+    name: string;
+};
+
 export default function UploadMusic() {
     const setMessage = useMessage().setMessage;
     const [files, setFiles] = useState<UploadFileItem[]>([]);
     const [uploading, setUploading] = useState(false);
     const [cosEnabled, setCosEnabled] = useState<boolean | null>(null);
+    const [playlists, setPlaylists] = useState<PlaylistOption[]>([]);
+    const [selectedPlaylistId, setSelectedPlaylistId] = useState<number | ''>('');
+    const [newPlaylistName, setNewPlaylistName] = useState('');
+    const [creatingPlaylist, setCreatingPlaylist] = useState(false);
 
     const authHeader = useMemo(
         () => ({ Authorization: localStorage.getItem('token') || '' }),
         []
     );
+
+    // 加载歌单列表
+    const loadPlaylists = useCallback(async () => {
+        try {
+            const response = await axios.get('/getAllPlaylists', { headers: authHeader });
+            const data = response.data;
+            const list = Array.isArray(data) ? data : (data.items || []);
+            setPlaylists(list.map((p: any) => ({ id: p.id, name: p.playlist_name })));
+        } catch {
+            // 静默失败
+        }
+    }, [authHeader]);
+
+    useEffect(() => {
+        void loadPlaylists();
+    }, [loadPlaylists]);
+
+    // 创建新歌单
+    const createPlaylist = useCallback(async () => {
+        const name = newPlaylistName.trim();
+        if (!name) {
+            setMessage('请输入歌单名称', 'warning');
+            return;
+        }
+        setCreatingPlaylist(true);
+        try {
+            await axios.post('/playlists', { name }, { headers: authHeader });
+            setMessage('歌单创建成功', 'success');
+            setNewPlaylistName('');
+            await loadPlaylists();
+        } catch {
+            setMessage('创建歌单失败', 'error');
+        } finally {
+            setCreatingPlaylist(false);
+        }
+    }, [authHeader, loadPlaylists, newPlaylistName, setMessage]);
 
     const updateFile = useCallback((index: number, updater: (file: UploadFileItem) => UploadFileItem) => {
         setFiles((prev) => prev.map((file, currentIndex) => (currentIndex === index ? updater(file) : file)));
@@ -192,6 +237,38 @@ export default function UploadMusic() {
         }));
 
         try {
+            // 确保元数据已解析（durationSec > 0）
+            if (currentFile.durationSec === 0) {
+                try {
+                    const metadata = await parseBlob(currentFile.file);
+                    if (metadata.format.duration) {
+                        updateFile(index, (target) => ({
+                            ...target,
+                            durationSec: metadata.format.duration || 0,
+                            duration: formatDuration(metadata.format.duration || 0),
+                        }));
+                        currentFile.durationSec = metadata.format.duration || 0;
+                    }
+                } catch {
+                    // 解析失败，使用 Audio 回退
+                    const audioUrl = URL.createObjectURL(currentFile.file);
+                    const audio = new Audio(audioUrl);
+                    await new Promise<void>((resolve) => {
+                        audio.onloadedmetadata = () => {
+                            currentFile.durationSec = audio.duration;
+                            updateFile(index, (target) => ({
+                                ...target,
+                                durationSec: audio.duration,
+                                duration: formatDuration(audio.duration),
+                            }));
+                            resolve();
+                        };
+                        audio.onerror = () => resolve();
+                    });
+                    URL.revokeObjectURL(audioUrl);
+                }
+            }
+
             const file = currentFile.file;
 
             // 1. 从后端获取预签名上传URL
@@ -231,14 +308,18 @@ export default function UploadMusic() {
 
             // 4. 通知后端上传完成，写入数据库
             const fileExtension = file.name.split('.').pop()?.toLowerCase() || '';
-            await axios.post('/upload/complete', {
+            const payload: Record<string, any> = {
                 cosKey,
                 title: currentFile.title,
                 artist: currentFile.artist,
                 duration: Math.floor(currentFile.durationSec * 1000),
                 fileExtension,
                 coverBase64,
-            }, { headers: authHeader });
+            };
+            if (selectedPlaylistId !== '') {
+                payload.playlistId = selectedPlaylistId;
+            }
+            await axios.post('/upload/complete', payload, { headers: authHeader });
 
             updateFile(index, (target) => ({
                 ...target,
@@ -255,7 +336,7 @@ export default function UploadMusic() {
                 uploadError: true
             }));
         }
-    }, [authHeader, files, updateFile, extractCoverBase64]);
+    }, [authHeader, files, updateFile, extractCoverBase64, selectedPlaylistId]);
 
     const uploadSingleFile = useCallback(async (index: number) => {
         const currentFile = files[index];
@@ -308,9 +389,11 @@ export default function UploadMusic() {
 
             await Promise.all(Array.from({ length: workerCount }, () => worker()));
 
-            await axios.post('/uploadchunkmerge', {
-                sessionId
-            }, { headers: authHeader });
+            const mergePayload: Record<string, any> = { sessionId };
+            if (selectedPlaylistId !== '') {
+                mergePayload.playlistId = selectedPlaylistId;
+            }
+            await axios.post('/uploadchunkmerge', mergePayload, { headers: authHeader });
 
             updateFile(index, (target) => ({
                 ...target,
@@ -326,7 +409,7 @@ export default function UploadMusic() {
                 uploadError: true
             }));
         }
-    }, [authHeader, files, updateFile, uploadChunk]);
+    }, [authHeader, files, updateFile, uploadChunk, selectedPlaylistId]);
 
     const checkCosEnabled = useCallback(async (): Promise<boolean> => {
         if (cosEnabled !== null) {
@@ -387,6 +470,44 @@ export default function UploadMusic() {
     return (
         <div className="upload-music-page">
             <h2>上传音乐</h2>
+
+            {/* 歌单选择区域 */}
+            <div className="upload-playlist-selector">
+                <label>目标歌单：</label>
+                <select
+                    value={selectedPlaylistId}
+                    onChange={(e) => {
+                        const val = e.target.value;
+                        setSelectedPlaylistId(val === '' ? '' : Number(val));
+                    }}
+                >
+                    <option value="">不加入歌单</option>
+                    {playlists.map((p) => (
+                        <option key={p.id} value={p.id}>{p.name}</option>
+                    ))}
+                </select>
+                <span className="playlist-or-text">或</span>
+                <input
+                    type="text"
+                    placeholder="新建歌单名称"
+                    value={newPlaylistName}
+                    onChange={(e) => setNewPlaylistName(e.target.value)}
+                    onKeyDown={(e) => {
+                        if (e.key === 'Enter') {
+                            void createPlaylist();
+                        }
+                    }}
+                />
+                <button
+                    type="button"
+                    className="upload-secondary-btn"
+                    disabled={creatingPlaylist}
+                    onClick={() => void createPlaylist()}
+                >
+                    {creatingPlaylist ? '创建中...' : '创建并选中'}
+                </button>
+            </div>
+
             <UploadDropzone onFilesSelected={addFiles} />
             <UploadFileTable
                 files={files}
@@ -403,7 +524,6 @@ export default function UploadMusic() {
                     void uploadFiles();
                 }}
             />
-            <QQMusicFun />
         </div>
     );
 }

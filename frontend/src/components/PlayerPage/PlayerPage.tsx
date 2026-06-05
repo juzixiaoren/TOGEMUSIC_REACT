@@ -5,7 +5,7 @@ import { useAudio } from '../../context/AudioContext';
 import { useSocket } from '../../context/SocketContext';
 import type { SocketEventHandlers } from '../../context/SocketContext';
 import audioimg from '../../assets/images/audioimg.png';
-import ImportSongsDialog from './ImportSongsDialog';
+import DrawerSearchPanel from './DrawerSearchPanel';
 import PlayerPanel from './PlayerPanel';
 import PlaylistPanel from './PlaylistPanel';
 import type { Playlist, Song } from './types';
@@ -33,7 +33,6 @@ export default function PlayerPage() {
 
     const [playlists, setPlaylists] = useState<Playlist[]>([]);
     const [currentPlaylist, setCurrentPlaylist] = useState<Song[]>([]);
-    const [showSelectDialog, setShowSelectDialog] = useState(false);
     const [selectedSongs, setSelectedSongs] = useState<number[]>([]);
     const [expandedPlaylist, setExpandedPlaylist] = useState<number | null>(null);
     const [playlistSongsMap, setPlaylistSongsMap] = useState<Record<number, Song[]>>({});
@@ -45,6 +44,7 @@ export default function PlayerPage() {
     const endedFallbackTimerRef = useRef<number | null>(null);
     const currentSongIdRef = useRef<number | null>(null);
     const [allSongs, setAllSongs] = useState<Song[]>([]);
+    const [drawerOpen, setDrawerOpen] = useState(false);
 
     const clearEndedFallbackTimer = useCallback(() => {
         if (endedFallbackTimerRef.current !== null) {
@@ -204,11 +204,15 @@ export default function PlayerPage() {
     const loadPlaylists = useCallback(async () => {
         try {
             const response = await axios.get('/getAllPlaylists', { headers: authHeader });
-            setPlaylists(response.data as Playlist[]);
+            const data = response.data;
+            const list = Array.isArray(data) ? data : (data.items || []);
+            setPlaylists(list as Playlist[]);
         } catch {
             try {
                 const fallbackResponse = await axios.get('/playlists', { headers: authHeader });
-                setPlaylists(fallbackResponse.data as Playlist[]);
+                const data = fallbackResponse.data;
+                const list = Array.isArray(data) ? data : (data.items || []);
+                setPlaylists(list as Playlist[]);
             } catch {
                 setMessage('加载歌单失败', 'error');
             }
@@ -317,7 +321,7 @@ export default function PlayerPage() {
                 headers: authHeader
             });
             await loadDefaultPlaylist();
-            setShowSelectDialog(false);
+            setDrawerOpen(false);
             setSelectedSongs([]);
             setMessage('导入歌曲成功', 'success');
         } catch {
@@ -520,67 +524,74 @@ export default function PlayerPage() {
 
     return (
         <>
-            <div className="player-page">
-                <PlayerPanel
-                    currentSong={currentSong}
-                    currentSongCoverUrl={currentSongCoverUrl}
-                    defaultCoverImage={audioimg}
-                    progressPercentage={progressPercentage}
-                    currentTime={currentTime}
-                    volume={volume}
-                    formatTime={formatTime}
-                    onPrevSong={prevSong}
-                    onNextSong={nextSong}
-                    onShuffle={shufflePlaylist}
-                    onOpenImportDialog={() => setShowSelectDialog(true)}
-                    onVolumeChange={handleSetVolume}
-                    onCoverLoadFailed={() => setCurrentSongCoverUrl(null)}
-                />
-                <PlaylistPanel
-                    displayPlaylist={displayPlaylist}
-                    currentSongId={currentSong?.id ?? null}
-                    formatTime={formatTime}
-                    onStopPlay={() => { void stopPlayback(); }}
-                    onPlay={() => { void startPlay(); }}
-                    onClear={() => { void clearPlaylist(); }}
-                    onDeleteSong={(songId) => { void deleteSong(songId); }}
-                    onDragStart={(index) => setDraggedIndex(index)}
-                    onDragOver={(event) => event.preventDefault()}
-                    onDrop={(targetIndex) => {
-                        if (draggedIndex === null || draggedIndex === targetIndex) {
-                            return;
-                        }
-                        if (draggedIndex === 0 || targetIndex === 0) {
-                            return;
-                        }
-                        const newPlaylist = [...currentPlaylist];
-                        const [draggedSong] = newPlaylist.splice(draggedIndex, 1);
-                        if (!draggedSong) {
-                            return;
-                        }
-                        newPlaylist.splice(targetIndex, 0, draggedSong);
-                        setCurrentPlaylist(newPlaylist);
-                        setDraggedIndex(null);
-                        void syncPlaylistOrder(newPlaylist);
-                    }}
-                    onDragEnd={() => setDraggedIndex(null)}
+            <div className="player-page-wrapper">
+                <div className={`player-page ${drawerOpen ? 'drawer-open' : ''}`}>
+                    <PlayerPanel
+                        currentSong={currentSong}
+                        currentSongCoverUrl={currentSongCoverUrl}
+                        defaultCoverImage={audioimg}
+                        progressPercentage={progressPercentage}
+                        currentTime={currentTime}
+                        volume={volume}
+                        formatTime={formatTime}
+                        onPrevSong={prevSong}
+                        onNextSong={nextSong}
+                        onShuffle={shufflePlaylist}
+                        onOpenImportDialog={() => setDrawerOpen(true)}
+                        onVolumeChange={handleSetVolume}
+                        onCoverLoadFailed={() => setCurrentSongCoverUrl(null)}
+                    />
+                    <PlaylistPanel
+                        displayPlaylist={displayPlaylist}
+                        currentSongId={currentSong?.id ?? null}
+                        formatTime={formatTime}
+                        onStopPlay={() => { void stopPlayback(); }}
+                        onPlay={() => { void startPlay(); }}
+                        onClear={() => { void clearPlaylist(); }}
+                        onDeleteSong={(songId) => { void deleteSong(songId); }}
+                        onDragStart={(index) => setDraggedIndex(index)}
+                        onDragOver={(event) => event.preventDefault()}
+                        onDrop={(targetIndex) => {
+                            if (draggedIndex === null || draggedIndex === targetIndex) return;
+                            if (draggedIndex === 0 || targetIndex === 0) return;
+                            const newPlaylist = [...currentPlaylist];
+                            const [draggedSong] = newPlaylist.splice(draggedIndex, 1);
+                            if (!draggedSong) return;
+                            newPlaylist.splice(targetIndex, 0, draggedSong);
+                            setCurrentPlaylist(newPlaylist);
+                            setDraggedIndex(null);
+                            void syncPlaylistOrder(newPlaylist);
+                        }}
+                        onDragEnd={() => setDraggedIndex(null)}
+                    />
+                </div>
+
+                <button
+                    type="button"
+                    className="drawer-toggle"
+                    onClick={() => setDrawerOpen(!drawerOpen)}
+                    title={drawerOpen ? '关闭' : '打开导入与搜索'}
+                >
+                    {drawerOpen ? '▶' : '◀'}
+                </button>
+
+                <DrawerSearchPanel
+                    isOpen={drawerOpen}
+                    onClose={() => setDrawerOpen(false)}
+                    playlists={playlists}
+                    allSongs={allSongs}
+                    expandedPlaylist={expandedPlaylist}
+                    playlistSongsMap={playlistSongsMap}
+                    selectedSongs={selectedSongs}
+                    onTogglePlaylistExpand={(playlistId) => { void togglePlaylistExpand(playlistId); }}
+                    onSelectAllFromPlaylist={selectAllFromPlaylist}
+                    onClearSelectionFromPlaylist={clearSelectionFromPlaylist}
+                    onToggleSong={toggleSongSelection}
+                    onImportSelectedSongs={() => { void importSelectedSongs(); }}
+                    onSongImported={() => { void syncPlaylistsAndStatus(); }}
                 />
             </div>
 
-            <ImportSongsDialog
-                isOpen={showSelectDialog}
-                playlists={playlists}
-                allSongs={allSongs}
-                expandedPlaylist={expandedPlaylist}
-                playlistSongsMap={playlistSongsMap}
-                selectedSongs={selectedSongs}
-                onTogglePlaylistExpand={(playlistId) => { void togglePlaylistExpand(playlistId); }}
-                onSelectAllFromPlaylist={selectAllFromPlaylist}
-                onClearSelectionFromPlaylist={clearSelectionFromPlaylist}
-                onToggleSong={toggleSongSelection}
-                onImportSelectedSongs={() => { void importSelectedSongs(); }}
-                onClose={() => setShowSelectDialog(false)}
-            />
             <button onClick={syncPlaylistsAndStatus} disabled={loading} style={{
                 height: '50px',
                 border: '1px solid rgb(29 178 185)',

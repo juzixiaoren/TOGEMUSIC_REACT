@@ -3,9 +3,11 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useMessage } from '../../context/MessageContext';
 import SongPickerDialog from './SongPickerDialog';
 import PlatformPlaylistImport from './PlatformPlaylistImport';
+import Pagination from './Pagination';
 import type { Playlist, Song, SortBy, User } from './types';
 import './PlaylistManager.css';
 import './PlatformPlaylistImport.css';
+import './Pagination.css';
 
 export default function PlaylistManager() {
     const setMessage = useMessage().setMessage;
@@ -18,6 +20,13 @@ export default function PlaylistManager() {
     const [allSongs, setAllSongs] = useState<Song[]>([]);
     const [users, setUsers] = useState<User[]>([]);
     const [sourcePlaylistSongsMap, setSourcePlaylistSongsMap] = useState<Record<number, Song[]>>({});
+
+    // 分页状态
+    const [playlistPage, setPlaylistPage] = useState(1);
+    const [playlistTotalPages, setPlaylistTotalPages] = useState(1);
+    const [songPage, setSongPage] = useState(1);
+    const [songTotalPages, setSongTotalPages] = useState(1);
+    const PAGE_SIZE = 10;
 
     const [showCreateDialog, setShowCreateDialog] = useState(false);
     const [showImportDialog, setShowImportDialog] = useState(false);
@@ -49,22 +58,32 @@ export default function PlaylistManager() {
         setExpandedSourcePlaylistIds([]);
     }, []);
 
-    const loadPlaylistDetail = useCallback(async (playlistId: number) => {
+    const loadPlaylistDetail = useCallback(async (playlistId: number, page = 1) => {
         try {
-            const response = await axios.get(`/playlists/${playlistId}`, { headers: authHeader });
+            const response = await axios.get(`/playlists/${playlistId}`, {
+                params: { page, page_size: PAGE_SIZE },
+                headers: authHeader
+            });
             setSelectedPlaylist(response.data.playlist as Playlist);
             setPlaylistSongs(response.data.songs as Song[]);
             setSelectedPlaylistId(playlistId);
+            setSongPage(response.data.page);
+            setSongTotalPages(response.data.total_pages);
         } catch {
             setMessage('加载歌单详情失败', 'error');
         }
     }, [authHeader, setMessage]);
 
-    const loadPlaylists = useCallback(async () => {
+    const loadPlaylists = useCallback(async (page = 1) => {
         try {
-            const response = await axios.get('/getAllPlaylists', { headers: authHeader });
-            const list = response.data as Playlist[];
+            const response = await axios.get('/getAllPlaylists', {
+                params: { page, page_size: PAGE_SIZE },
+                headers: authHeader
+            });
+            const list = response.data.items as Playlist[];
             setPlaylists(list);
+            setPlaylistPage(response.data.page);
+            setPlaylistTotalPages(response.data.total_pages);
             if (list.length === 0) {
                 setSelectedPlaylistId(null);
                 setSelectedPlaylist(null);
@@ -207,8 +226,11 @@ export default function PlaylistManager() {
         try {
             const beforeIds = new Set(playlists.map((playlist) => playlist.id));
             await axios.post('/playlists', { name }, { headers: authHeader });
-            const refreshed = await axios.get('/getAllPlaylists', { headers: authHeader });
-            const refreshedPlaylists = refreshed.data as Playlist[];
+            const refreshed = await axios.get('/getAllPlaylists', {
+                params: { page: 1, page_size: 100 },
+                headers: authHeader
+            });
+            const refreshedPlaylists = refreshed.data.items as Playlist[];
             setPlaylists(refreshedPlaylists);
 
             let newPlaylist = refreshedPlaylists.find((playlist) => !beforeIds.has(playlist.id));
@@ -262,18 +284,32 @@ export default function PlaylistManager() {
         }
     }, [authHeader, loadPlaylistDetail, resetPickerState, selectedPlaylistId, selectedSongIds, setMessage]);
 
+    const allSongsPlaylistId = useMemo(() => {
+        const found = playlists.find((p) => p.playlist_name === '所有歌曲');
+        return found?.id ?? null;
+    }, [playlists]);
+
     const removeSong = useCallback(async (songId: number) => {
         if (!selectedPlaylistId) {
             return;
         }
         try {
-            await axios.delete(`/playlists/${selectedPlaylistId}/songs/${songId}`, { headers: authHeader });
-            await loadPlaylistDetail(selectedPlaylistId);
-            setMessage('歌曲删除成功', 'success');
+            if (selectedPlaylistId === allSongsPlaylistId) {
+                // "所有歌曲"歌单：永久删除（数据库+COS文件）
+                await axios.delete(`/songs/${songId}`, { headers: authHeader });
+                await loadPlaylistDetail(selectedPlaylistId);
+                await loadAllSongs();
+                setMessage('歌曲已永久删除', 'success');
+            } else {
+                // 普通歌单：仅移除关联
+                await axios.delete(`/playlists/${selectedPlaylistId}/songs/${songId}`, { headers: authHeader });
+                await loadPlaylistDetail(selectedPlaylistId);
+                setMessage('歌曲已从歌单移除', 'success');
+            }
         } catch {
             setMessage('删除歌曲失败', 'error');
         }
-    }, [authHeader, loadPlaylistDetail, selectedPlaylistId, setMessage]);
+    }, [authHeader, loadAllSongs, loadPlaylistDetail, selectedPlaylistId, setMessage]);
 
     return (
         <div className="playlist-manager-page">
@@ -295,6 +331,11 @@ export default function PlaylistManager() {
                         </li>
                     ))}
                 </ul>
+                <Pagination
+                    currentPage={playlistPage}
+                    totalPages={playlistTotalPages}
+                    onPageChange={(page) => { void loadPlaylists(page); }}
+                />
             </div>
 
             <div className="playlist-manager-right">
@@ -319,12 +360,19 @@ export default function PlaylistManager() {
                                 <div className="song-sub">{song.artist}</div>
                             </div>
                             <button type="button" className="playlist-secondary-btn" onClick={() => { void removeSong(song.id); }}>
-                                删除
+                                {selectedPlaylistId === allSongsPlaylistId ? '永久删除' : '删除'}
                             </button>
                         </li>
                     ))}
                     {playlistSongs.length === 0 && <li className="playlist-empty">当前歌单还没有歌曲</li>}
                 </ul>
+                {selectedPlaylistId && (
+                    <Pagination
+                        currentPage={songPage}
+                        totalPages={songTotalPages}
+                        onPageChange={(page) => { void loadPlaylistDetail(selectedPlaylistId, page); }}
+                    />
+                )}
             </div>
 
             <SongPickerDialog

@@ -9,3 +9,5 @@ PyJWT
 redis
 flask_apscheduler
 eventlet
+pycryptodome
+requests
