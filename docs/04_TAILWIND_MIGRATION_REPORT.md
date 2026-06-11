@@ -148,14 +148,139 @@ npm run build
 
 4. **颜色令牌复用**: 已将 219+ 个 HEX 颜色实例和 74+ 个 rgba 实例合并为语义化令牌组，提高了样式一致性。
 
+## 深色模式优化 (2026-06-11)
+
+### 1. 优化目标
+
+在 Tailwind CSS 迁移基础上，实现统一的深色模式方案：
+- **CSS变量驱动变化**：保持相同的 Tailwind CSS 类名，通过 `var(--color-xxx)` 实现深浅色切换
+- **统一修复**：移除所有冗余的 `dark:bg-[#xxx]` 覆盖，统一使用令牌系统
+- **硬编码颜色替换**：将所有 `bg-[#xxx]`、`text-[#xxx]`、`border-[#xxx]` 替换为注册的 Tailwind CSS 颜色令牌
+
+### 2. 新增颜色令牌
+
+**文件**: `frontend/tailwind.config.js`
+
+在 `theme.extend.colors` 中新增了 8 个语义化令牌：
+
+| 令牌名称 | 用途 | 浅色值 | 深色值 |
+|----------|------|--------|--------|
+| `surface-card` | 卡片背景 | `#ffffff` | `#252535` |
+| `surface-elevated` | 悬浮元素背景 | `#ffffff` | `#2a2a3e` |
+| `surface-elevated-hover` | 悬浮元素悬停态 | `#f5f5f5` | `#333348` |
+| `text-medium` | 中等强调文字 | `#444444` | `#b0b0b0` |
+| `text-blue-gray` | 蓝灰色文字 | `#9ca3bf` | `#6a6a8a` |
+| `text-warning` | 警告文字 | `#d46b08` | `#ffa940` |
+| `border-pink` | 粉色边框 | `#f0e9e9` | `#3a3a4a` |
+| `platform.qq-mid` | QQ音乐中间色 | `#1db954` | `#1db954` |
+
+### 3. CSS变量定义
+
+**文件**: `frontend/src/index.css`
+
+为每个新增令牌在 `:root` 和 `.dark` 中定义对应的 CSS 变量：
+
+```css
+:root {
+  --color-surface-card: #ffffff;
+  --color-surface-elevated: #ffffff;
+  --color-surface-elevated-hover: #f5f5f5;
+  --color-text-medium: #444444;
+  --color-text-blue-gray: #9ca3bf;
+  --color-text-warning: #d46b08;
+  --color-border-pink: #f0e9e9;
+}
+
+.dark {
+  --color-surface-card: #252535;
+  --color-surface-elevated: #2a2a3e;
+  --color-surface-elevated-hover: #333348;
+  --color-text-medium: #b0b0b0;
+  --color-text-blue-gray: #6a6a8a;
+  --color-text-warning: #ffa940;
+  --color-border-pink: #3a3a4a;
+}
+```
+
+### 4. 三层令牌系统
+
+建立了三层表面令牌系统，用于不同层级的背景色：
+
+1. **`surface`** → 主背景色（`#f5f5f5` / `#1e1e2e`）
+2. **`surface-card`** → 卡片背景（`#ffffff` / `#252535`）
+3. **`surface-elevated`** → 悬浮元素背景（`#ffffff` / `#2a2a3e`）
+
+### 5. 组件修改汇总
+
+修改了 13+ 个组件文件，移除硬编码颜色和冗余深色模式覆盖：
+
+| 组件文件 | 修改内容 |
+|----------|----------|
+| `PlayerPanel.tsx` | 播放器面板、进度条、音量滑块 |
+| `PlaylistPanel.tsx` | 播放列表操作按钮 |
+| `DrawerSearchPanel.tsx` | 搜索面板按钮 |
+| `OnlineUsers.tsx` | 在线用户面板 |
+| `PlaylistManager.tsx` | 播放列表管理面板 |
+| `Pagination.tsx` | 分页按钮 |
+| `PlatformPlaylistImport.tsx` | 平台导入对话框 |
+| `SongPickerDialog.tsx` | 歌曲选择对话框 |
+| `HeaderTop.tsx` | 顶部导航栏 |
+| `UploadFileTable.tsx` | 上传文件表格 |
+| `QQMusicFun.tsx` | QQ音乐功能组件 |
+| `MusicLogin.tsx` | 音乐登录组件（含完整登录模态框重构） |
+
+**典型修改模式**：
+- `bg-white dark:bg-[#2a2a3e]` → `bg-surface-elevated`
+- `bg-white dark:bg-[#252535]` → `bg-surface-card`
+- `text-[#444]` → `text-text-medium`
+- `text-[#9ca3bf] dark:text-[#6a6a8a]` → `text-text-blue-gray`
+- `border-[#f0e9e9]` → `border-border-pink`
+
+### 6. 背景图片深色模式修复
+
+**问题**：深色模式下页面背景图片未切换到 `终末地视频帧_dark.png`
+
+**原因**：CSS选择器 `body.dark` 与 `DarkModeContext` 将 `dark` 类添加到 `<html>` 元素的实现不匹配
+
+**修复**：将 `body.dark` 改为 `html.dark body`
+
+```css
+/* 修复前 */
+body.dark {
+  background-image: ...;
+}
+
+/* 修复后 */
+html.dark body {
+  background-image: ...;
+}
+```
+
+### 7. 构建验证
+
+```bash
+npm run build
+```
+
+构建成功，输出：
+- `dist/index.html`: 0.52 kB
+- `dist/assets/index.css`: 43.16 kB (gzip: 8.58 kB)
+- `dist/assets/index.js`: 842.99 kB (gzip: 246.74 kB)
+
 ## 后续建议
 
-1. **代码分割**: 构建警告提示主 JS 包过大 (811.73 kB)，建议使用动态 import 进行代码分割。
+1. **代码分割**: 构建警告提示主 JS 包过大 (842.99 kB)，建议使用动态 import 进行代码分割。
 
 2. **CSS 类名优化**: 可以考虑将常用的 `@apply` 组合提取为自定义 CSS 组件类，减少重复。
 
 3. **TypeScript 类型改进**: 部分使用 `any` 类型的地方可以进一步优化为更具体的类型定义。
 
+4. **深色模式扩展**: 可考虑添加更多语义化令牌（如 `surface-muted`、`text-disabled` 等）以支持更丰富的 UI 状态。
+
 ## 文档更新
 
 本报告已创建为 `docs/04_TAILWIND_MIGRATION_REPORT.md`，记录了迁移的详细过程和结果。
+
+**最后更新**: 2026-06-11  
+**维护者**: AI Assistant  
+**文档版本**: 1.1

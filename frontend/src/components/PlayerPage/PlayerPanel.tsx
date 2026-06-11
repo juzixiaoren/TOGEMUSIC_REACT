@@ -16,7 +16,7 @@ type PlayerPanelProps = {
     onCoverLoadFailed: () => void;
 };
 
-const TOGGLE_BTN = 'bg-white cursor-pointer py-2.5 px-3.5 border border-border rounded-lg text-[13px] text-text-secondary font-medium -translate-y-1.5';
+const TOGGLE_BTN = 'bg-surface-elevated cursor-pointer py-2.5 px-3.5 border border-border rounded-lg text-[13px] text-text-secondary font-medium -translate-y-1.5 hover:bg-surface-elevated-hover';
 
 export default function PlayerPanel({
     currentSong,
@@ -39,12 +39,12 @@ export default function PlayerPanel({
 .volume-slider::-webkit-slider-thumb{appearance:none;width:16px;height:16px;border-radius:50%;background:#6366F1;cursor:pointer}
 .volume-slider::-moz-range-thumb{width:16px;height:16px;border-radius:50%;background:#6366F1;cursor:pointer;border:none}
 `}</style>
-            <div className="bg-white rounded-2xl flex flex-col items-center flex-[0_0_360px] px-6 shadow-panel">
+            <div className="bg-surface rounded-2xl flex flex-col items-center flex-[0_0_360px] px-6 shadow-panel">
                 <div className="w-full mb-5">
                     <h2 className="m-0 text-center text-2xl text-text-primary">正在播放</h2>
                 </div>
 
-                <div className="rounded-2xl flex items-center justify-center overflow-hidden w-60 h-60 mb-6 shadow-cover bg-[#f0f0f0]">
+                <div className="rounded-2xl flex items-center justify-center overflow-hidden w-60 h-60 mb-6 shadow-cover bg-surface-gray">
                     {currentSongCoverUrl ? (
                         <img
                             src={currentSongCoverUrl}
@@ -75,7 +75,7 @@ export default function PlayerPanel({
 
                 {currentSong && (
                     <div className="w-full mb-5">
-                        <div className="w-full overflow-hidden h-1.5 bg-[#e0e0e0] rounded-[3px] mb-3">
+                        <div className="w-full overflow-hidden h-1.5 bg-surface-gray-hover rounded-[3px] mb-3">
                             <div className="h-full bg-primary rounded-[3px] transition-[width] duration-100 ease-linear" style={{ width: `${progressPercentage}%` }}></div>
                         </div>
                         <div className="flex justify-between text-xs text-text-quaternary">
@@ -109,7 +109,7 @@ export default function PlayerPanel({
                         max={100}
                         value={volume}
                         onChange={(event) => onVolumeChange(Number(event.target.value))}
-                        style={{ background: `linear-gradient(90deg, #6366F1 0%, #6366F1 ${volume}%, #ddd ${volume}%, #ddd 100%)` }}
+                        style={{ background: `linear-gradient(90deg, #6366F1 0%, #6366F1 ${volume}%, var(--color-surface-gray-hover) ${volume}%, var(--color-surface-gray-hover) 100%)` }}
                     />
                     <span className="font-semibold text-right text-[13px] text-text-secondary min-w-[40px]">{volume}%</span>
                 </div>

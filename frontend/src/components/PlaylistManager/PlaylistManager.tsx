@@ -1,18 +1,20 @@
 import axios from 'axios';
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { useCallback, useMemo, useState } from 'react';
 import { useMessage } from '../../context/MessageContext';
+import { usePlaylist } from '../../context/PlaylistContext';
 import SongPickerDialog from './SongPickerDialog';
 import PlatformPlaylistImport from './PlatformPlaylistImport';
 import Pagination from './Pagination';
-import type { Playlist, Song, SortBy, User } from './types';
+import type { Playlist, Song, SortBy } from './types';
 const CL = {
     page: 'grid grid-cols-[320px_1fr] gap-[18px] w-full min-h-[580px] max-[960px]:grid-cols-1',
-    panel: 'bg-white rounded-2xl flex flex-col min-h-0 p-[18px] shadow-card-lg',
+    panel: 'bg-surface rounded-2xl flex flex-col min-h-0 p-[18px] shadow-card-lg',
     header: 'flex justify-between items-center gap-2.5 mb-[14px]',
     headerTitle: 'm-0 text-xl text-text-primary',
     headerBtns: 'flex gap-2',
     primaryBtn: 'border-none rounded-xl font-semibold cursor-pointer py-[9px] px-[14px] text-white bg-primary',
-    secondaryBtn: 'bg-white rounded-lg cursor-pointer border border-border-blue-muted py-1.5 px-2.5 text-text-blue-muted',
+    secondaryBtn: 'bg-surface-elevated rounded-lg cursor-pointer border border-border-blue-muted py-1.5 px-2.5 text-text-blue-muted',
+    refreshBtn: 'bg-surface-elevated rounded-lg cursor-pointer border border-border-blue-muted py-1.5 px-2.5 text-text-blue-muted hover:bg-primary hover:text-white hover:border-primary',
     playlistList: 'list-none m-0 p-0 overflow-auto flex flex-col gap-2',
     itemBtn: 'w-full text-left cursor-pointer border border-border-blue-source bg-surface-blue-light rounded-[10px] py-[10px] px-3 text-text-blue-placeholder',
     itemBtnActive: 'border-primary bg-primary-light',
@@ -20,27 +22,30 @@ const CL = {
     songItem: 'flex justify-between items-center gap-2.5 border border-border-blue-pale rounded-[10px] bg-surface-blue-pale py-[10px] px-3',
     songTitle: 'font-semibold text-sm text-text-blue-deep',
     songSub: 'text-xs text-text-blue-sub',
-    empty: 'justify-center text-[#9ca3bf]',
+    empty: 'justify-center text-text-blue-gray',
 };
 
 export default function PlaylistManager() {
     const setMessage = useMessage().setMessage;
+    const {
+        playlists,
+        allSongs,
+        users,
+        isLoading,
+        loadPlaylists,
+        loadPlaylistDetail,
+        loadAllSongs,
+        refreshAll,
+        selectedPlaylistId,
+        selectedPlaylist,
+        playlistSongs,
+        playlistPage,
+        playlistTotalPages,
+        songPage,
+        songTotalPages,
+    } = usePlaylist();
 
-    const [playlists, setPlaylists] = useState<Playlist[]>([]);
-    const [selectedPlaylistId, setSelectedPlaylistId] = useState<number | null>(null);
-    const [selectedPlaylist, setSelectedPlaylist] = useState<Playlist | null>(null);
-    const [playlistSongs, setPlaylistSongs] = useState<Song[]>([]);
-
-    const [allSongs, setAllSongs] = useState<Song[]>([]);
-    const [users, setUsers] = useState<User[]>([]);
     const [sourcePlaylistSongsMap, setSourcePlaylistSongsMap] = useState<Record<number, Song[]>>({});
-
-    // 分页状态
-    const [playlistPage, setPlaylistPage] = useState(1);
-    const [playlistTotalPages, setPlaylistTotalPages] = useState(1);
-    const [songPage, setSongPage] = useState(1);
-    const [songTotalPages, setSongTotalPages] = useState(1);
-    const PAGE_SIZE = 10;
 
     const [showCreateDialog, setShowCreateDialog] = useState(false);
     const [showImportDialog, setShowImportDialog] = useState(false);
@@ -54,13 +59,10 @@ export default function PlaylistManager() {
     const [selectedSongIds, setSelectedSongIds] = useState<number[]>([]);
     const [selectedSourcePlaylistIds, setSelectedSourcePlaylistIds] = useState<number[]>([]);
     const [expandedSourcePlaylistIds, setExpandedSourcePlaylistIds] = useState<number[]>([]);
-    const selectedPlaylistIdRef = useRef<number | null>(null);
-    const hasInitializedRef = useRef(false);
 
-    const authHeader = useMemo(
-        () => ({ Authorization: localStorage.getItem('token') || '' }),
-        []
-    );
+    const getAuthHeader = useCallback(() => ({
+        Authorization: localStorage.getItem('token') || ''
+    }), []);
 
     const resetPickerState = useCallback(() => {
         setActiveTab('songs');
@@ -72,81 +74,6 @@ export default function PlaylistManager() {
         setExpandedSourcePlaylistIds([]);
     }, []);
 
-    const loadPlaylistDetail = useCallback(async (playlistId: number, page = 1) => {
-        try {
-            const response = await axios.get(`/playlists/${playlistId}`, {
-                params: { page, page_size: PAGE_SIZE },
-                headers: authHeader
-            });
-            setSelectedPlaylist(response.data.playlist as Playlist);
-            setPlaylistSongs(response.data.songs as Song[]);
-            setSelectedPlaylistId(playlistId);
-            setSongPage(response.data.page);
-            setSongTotalPages(response.data.total_pages);
-        } catch {
-            setMessage('加载歌单详情失败', 'error');
-        }
-    }, [authHeader, setMessage]);
-
-    const loadPlaylists = useCallback(async (page = 1) => {
-        try {
-            const response = await axios.get('/getAllPlaylists', {
-                params: { page, page_size: PAGE_SIZE },
-                headers: authHeader
-            });
-            const list = response.data.items as Playlist[];
-            setPlaylists(list);
-            setPlaylistPage(response.data.page);
-            setPlaylistTotalPages(response.data.total_pages);
-            if (list.length === 0) {
-                setSelectedPlaylistId(null);
-                setSelectedPlaylist(null);
-                setPlaylistSongs([]);
-                return list;
-            }
-            const currentSelectedId = selectedPlaylistIdRef.current;
-            const targetId = currentSelectedId && list.some((p) => p.id === currentSelectedId)
-                ? currentSelectedId
-                : list[0].id;
-            await loadPlaylistDetail(targetId);
-            return list;
-        } catch {
-            setMessage('加载歌单失败', 'error');
-            return [] as Playlist[];
-        }
-    }, [authHeader, loadPlaylistDetail, setMessage]);
-
-    const loadAllSongs = useCallback(async () => {
-        try {
-            const response = await axios.get('/songs', { headers: authHeader });
-            setAllSongs(response.data as Song[]);
-        } catch {
-            setMessage('加载歌曲失败', 'error');
-        }
-    }, [authHeader, setMessage]);
-
-    const loadUsers = useCallback(async () => {
-        try {
-            const response = await axios.get('/users', { headers: authHeader });
-            setUsers(response.data as User[]);
-        } catch {
-            setMessage('加载用户失败', 'error');
-        }
-    }, [authHeader, setMessage]);
-
-    useEffect(() => {
-        selectedPlaylistIdRef.current = selectedPlaylistId;
-    }, [selectedPlaylistId]);
-
-    useEffect(() => {
-        if (hasInitializedRef.current) {
-            return;
-        }
-        hasInitializedRef.current = true;
-        // eslint-disable-next-line react-hooks/set-state-in-effect
-        void Promise.all([loadPlaylists(), loadAllSongs(), loadUsers()]);
-    }, [loadAllSongs, loadPlaylists, loadUsers]);
-
     const availableSourcePlaylists = useMemo(() => {
         return playlists.filter((playlist) => playlist.id !== selectedPlaylistId);
     }, [playlists, selectedPlaylistId]);
@@ -156,7 +83,7 @@ export default function PlaylistManager() {
             return;
         }
         try {
-            const response = await axios.get(`/playlists/${playlistId}`, { headers: authHeader });
+            const response = await axios.get(`/playlists/${playlistId}`, { headers: getAuthHeader() });
             setSourcePlaylistSongsMap((prev) => ({
                 ...prev,
                 [playlistId]: response.data.songs as Song[]
@@ -164,7 +91,7 @@ export default function PlaylistManager() {
         } catch {
             setMessage('加载来源歌单歌曲失败', 'error');
         }
-    }, [authHeader, setMessage, sourcePlaylistSongsMap]);
+    }, [getAuthHeader, setMessage, sourcePlaylistSongsMap]);
 
     const toggleSong = useCallback((songId: number, checked: boolean) => {
         setSelectedSongIds((prev) => {
@@ -240,13 +167,11 @@ export default function PlaylistManager() {
 
         try {
             const beforeIds = new Set(playlists.map((playlist) => playlist.id));
-            await axios.post('/playlists', { name }, { headers: authHeader });
-            const refreshed = await axios.get('/getAllPlaylists', {
-                params: { page: 1, page_size: 100 },
-                headers: authHeader
-            });
-            const refreshedPlaylists = refreshed.data.items as Playlist[];
-            setPlaylists(refreshedPlaylists);
+            await axios.post('/playlists', { name }, { headers: getAuthHeader() });
+            
+            // 刷新歌单列表
+            const refreshed = await loadPlaylists(1);
+            const refreshedPlaylists = refreshed as Playlist[];
 
             let newPlaylist = refreshedPlaylists.find((playlist) => !beforeIds.has(playlist.id));
             if (!newPlaylist) {
@@ -257,7 +182,7 @@ export default function PlaylistManager() {
             if (newPlaylist && selectedSongIds.length > 0) {
                 await axios.post(`/playlists/${newPlaylist.id}/songs`, {
                     songIds: selectedSongIds
-                }, { headers: authHeader });
+                }, { headers: getAuthHeader() });
             }
 
             setShowCreateDialog(false);
@@ -266,15 +191,13 @@ export default function PlaylistManager() {
 
             if (newPlaylist) {
                 await loadPlaylistDetail(newPlaylist.id);
-            } else {
-                await loadPlaylists();
             }
 
             setMessage('歌单创建成功', 'success');
         } catch {
             setMessage('创建歌单失败', 'error');
         }
-    }, [authHeader, loadPlaylistDetail, loadPlaylists, newPlaylistName, playlists, resetPickerState, selectedSongIds, setMessage]);
+    }, [getAuthHeader, loadPlaylistDetail, loadPlaylists, newPlaylistName, playlists, resetPickerState, selectedSongIds, setMessage]);
 
     const importSongsToPlaylist = useCallback(async () => {
         if (!selectedPlaylistId) {
@@ -289,7 +212,7 @@ export default function PlaylistManager() {
         try {
             await axios.post(`/playlists/${selectedPlaylistId}/songs`, {
                 songIds: selectedSongIds
-            }, { headers: authHeader });
+            }, { headers: getAuthHeader() });
             setShowImportDialog(false);
             resetPickerState();
             await loadPlaylistDetail(selectedPlaylistId);
@@ -297,7 +220,7 @@ export default function PlaylistManager() {
         } catch {
             setMessage('导入歌曲失败', 'error');
         }
-    }, [authHeader, loadPlaylistDetail, resetPickerState, selectedPlaylistId, selectedSongIds, setMessage]);
+    }, [getAuthHeader, loadPlaylistDetail, resetPickerState, selectedPlaylistId, selectedSongIds, setMessage]);
 
     const allSongsPlaylistId = useMemo(() => {
         const found = playlists.find((p) => p.playlist_name === '所有歌曲');
@@ -312,27 +235,37 @@ export default function PlaylistManager() {
         try {
             if (selectedPlaylistId === allSongsPlaylistId) {
                 // "所有歌曲"歌单：永久删除（数据库+COS文件）
-                await axios.delete(`/songs/${songId}`, { headers: authHeader });
+                await axios.delete(`/songs/${songId}`, { headers: getAuthHeader() });
                 await loadPlaylistDetail(selectedPlaylistId);
                 await loadAllSongs();
                 setMessage('歌曲已永久删除', 'success');
             } else {
                 // 普通歌单：仅移除关联
-                await axios.delete(`/playlists/${selectedPlaylistId}/songs/${songId}`, { headers: authHeader });
+                await axios.delete(`/playlists/${selectedPlaylistId}/songs/${songId}`, { headers: getAuthHeader() });
                 await loadPlaylistDetail(selectedPlaylistId);
                 setMessage('歌曲已从歌单移除', 'success');
             }
         } catch {
             setMessage('删除歌曲失败', 'error');
         }
-    }, [authHeader, loadAllSongs, loadPlaylistDetail, selectedPlaylistId, setMessage]);
+    }, [getAuthHeader, loadAllSongs, loadPlaylistDetail, selectedPlaylistId, setMessage]);
 
     return (
         <div className={CL.page}>
             <div className={CL.panel}>
                 <div className={CL.header}>
                     <h2 className={CL.headerTitle}>我的歌单</h2>
-                    <button type="button" className={CL.primaryBtn} onClick={openCreateDialog}>创建歌单</button>
+                    <div className={CL.headerBtns}>
+                        <button
+                            type="button"
+                            className={CL.refreshBtn}
+                            onClick={() => { void refreshAll(); }}
+                            disabled={isLoading}
+                        >
+                            {isLoading ? '刷新中...' : '刷新'}
+                        </button>
+                        <button type="button" className={CL.primaryBtn} onClick={openCreateDialog}>创建歌单</button>
+                    </div>
                 </div>
                 <ul className={CL.playlistList}>
                     {playlists.map((playlist) => (

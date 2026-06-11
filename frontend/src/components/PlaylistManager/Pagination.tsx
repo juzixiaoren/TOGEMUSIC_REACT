@@ -44,8 +44,8 @@ export default function Pagination({ currentPage, totalPages, onPageChange }: Pa
         return pages;
     };
 
-    const btnClass = "border border-border-blue-page bg-white rounded-lg px-3 py-1.5 cursor-pointer text-text-blue-muted text-xs transition-all duration-200 hover:border-primary hover:text-primary disabled:opacity-50 disabled:cursor-not-allowed";
-    const pageBaseClass = "w-8 h-8 border border-border-blue-page bg-white rounded-lg cursor-pointer text-text-blue-muted text-xs flex items-center justify-center transition-all duration-200 hover:border-primary hover:text-primary";
+    const btnClass = "border border-border-blue-page bg-surface-elevated rounded-lg px-3 py-1.5 cursor-pointer text-text-blue-muted text-xs transition-all duration-200 hover:border-primary hover:text-primary disabled:opacity-50 disabled:cursor-not-allowed";
+    const pageBaseClass = "w-8 h-8 border border-border-blue-page bg-surface-elevated rounded-lg cursor-pointer text-text-blue-muted text-xs flex items-center justify-center transition-all duration-200 hover:border-primary hover:text-primary";
     const pageActiveClass = "border-transparent text-white bg-primary";
 
     return (

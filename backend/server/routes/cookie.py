@@ -9,12 +9,14 @@ import re
 import json
 import asyncio
 import threading
+import atexit
 from datetime import datetime, timedelta
 from flask import Blueprint, request, jsonify, current_app
 from dao.cookie_pool import CookiePool
 from dao.user_music_session import UserMusicSession
 from dao.song import Song
 from dao.playlist import Playlist
+from dao.db_queue import db_queue
 from utils.qqmusic_tool import QQMusicTool
 from utils.netease_tool import NeteaseMusicTool
 
@@ -22,9 +24,75 @@ cookie_bp = Blueprint('cookie', __name__)
 cookie_pool = CookiePool()
 user_session_model = UserMusicSession()
 
-# Puppeteer进程管理
-_puppeteer_process = None
-_puppeteer_status = {'running': False, 'platform': None, 'user_id': None}
+# Puppeteer进程管理（per-user+platform，允许多个用户同时登录不同平台）
+_puppeteer_lock = threading.Lock()
+_puppeteer_status = {}  # key: f"user_{user_id}_{platform}", value: status dict
+
+
+def _cleanup_puppeteer_on_exit():
+    """后端退出时清理所有Puppeteer子进程"""
+    with _puppeteer_lock:
+        for key, status in _puppeteer_status.items():
+            proc = status.get('process')
+            if proc and proc.poll() is None:
+                try:
+                    import signal
+                    if os.name != 'nt':
+                        os.killpg(os.getpgid(proc.pid), signal.SIGTERM)
+                    proc.kill()
+                except (ProcessLookupError, OSError):
+                    pass
+
+
+atexit.register(_cleanup_puppeteer_on_exit)
+
+# Socket.IO事件处理（在app.py中注册）
+def register_socketio_events(socketio):
+    """注册Socket.IO事件处理器"""
+    
+    @socketio.on('login_screenshot')
+    def handle_login_screenshot(data):
+        """接收Puppeteer截图并转发给对应的用户"""
+        from flask_socketio import emit
+        platform = data.get('platform')
+        screenshot = data.get('screenshot')
+        
+        # 从_puppeteer_status中查找对应platform的user_id
+        with _puppeteer_lock:
+            for key, status in _puppeteer_status.items():
+                if status.get('platform') == platform and status.get('running'):
+                    user_id = status.get('user_id')
+                    if user_id and screenshot:
+                        # 发送给特定用户房间
+                        emit('login_qr_update', {
+                            'platform': platform,
+                            'screenshot': screenshot
+                        }, to=f'user_{user_id}')
+                        print(f"📸 转发截图给用户 {user_id}, 平台: {platform}")
+                    break
+    
+    @socketio.on('login_status_update')
+    def handle_login_status_update(data):
+        """接收Puppeteer登录状态更新并转发给对应的用户"""
+        from flask_socketio import emit
+        platform = data.get('platform')
+        status = data.get('status')
+        message = data.get('message')
+        
+        # 从_puppeteer_status中查找对应platform的user_id
+        with _puppeteer_lock:
+            for key, status_info in _puppeteer_status.items():
+                if status_info.get('platform') == platform and status_info.get('running'):
+                    user_id = status_info.get('user_id')
+                    if user_id:
+                        # 发送给特定用户房间
+                        emit('login_status_update', {
+                            'platform': platform,
+                            'status': status,
+                            'message': message
+                        }, to=f'user_{user_id}')
+                        print(f"✅ 转发登录状态给用户 {user_id}, 平台: {platform}, 状态: {status}")
+                    break
 
 
 def verify_token(token):
@@ -196,8 +264,16 @@ def qqmusic_login_init():
     if not user_id:
         return jsonify({'message': 'Invalid token'}), 401
 
-    if _puppeteer_status['running']:
-        return jsonify({'message': '登录流程已在进行中'}), 409
+    key = f"user_{user_id}_qqmusic"
+    with _puppeteer_lock:
+        if key in _puppeteer_status and _puppeteer_status[key].get('running'):
+            # 检查进程是否仍然存活
+            proc = _puppeteer_status[key].get('process')
+            if proc and proc.poll() is not None:
+                # 进程已退出但状态未重置，重置状态
+                del _puppeteer_status[key]
+            else:
+                return jsonify({'message': '登录流程已在进行中'}), 409
 
     # 启动Puppeteer（异步）
     thread = threading.Thread(
@@ -354,9 +430,22 @@ def netease_login_status():
 
     is_vip = False
     if uid:
+        # 优先从Cookie池获取VIP状态
         cookie_row = cookie_pool.find_cookie_by_uin(uid, 'netease')
         if cookie_row:
             is_vip = bool(cookie_row.get('is_vip', 0))
+        
+        # 如果Cookie池中没有VIP标记，直接检测当前session的VIP状态
+        if not is_vip and has_session:
+            try:
+                session_data = user_session_model.get_session_data(user_id, 'netease')
+                if session_data:
+                    is_vip = _detect_netease_vip(session_data, uid)
+                    # 如果检测到VIP，更新Cookie池中的VIP状态
+                    if is_vip and cookie_row:
+                        cookie_pool.update_vip_status(cookie_row['id'], True)
+            except Exception as e:
+                print(f"⚠️ 检测网易云VIP状态失败: {e}")
 
     return jsonify({
         'logged_in': has_session,
@@ -374,8 +463,16 @@ def netease_login_init():
     if not user_id:
         return jsonify({'message': 'Invalid token'}), 401
 
-    if _puppeteer_status['running']:
-        return jsonify({'message': '登录流程已在进行中'}), 409
+    key = f"user_{user_id}_netease"
+    with _puppeteer_lock:
+        if key in _puppeteer_status and _puppeteer_status[key].get('running'):
+            # 检查进程是否仍然存活
+            proc = _puppeteer_status[key].get('process')
+            if proc and proc.poll() is not None:
+                # 进程已退出但状态未重置，重置状态
+                del _puppeteer_status[key]
+            else:
+                return jsonify({'message': '登录流程已在进行中'}), 409
 
     # 启动Puppeteer（异步）
     thread = threading.Thread(
@@ -386,6 +483,43 @@ def netease_login_init():
     thread.start()
 
     return jsonify({'message': '登录流程已启动'}), 200
+
+
+@cookie_bp.route('/music-login/cancel', methods=['POST'])
+def cancel_login():
+    """取消正在进行的Puppeteer登录流程"""
+    token = request.headers.get('Authorization')
+    user_id = verify_token(token)
+    if not user_id:
+        return jsonify({'message': 'Invalid token'}), 401
+
+    # 查找该用户所有正在运行的登录流程
+    cancelled = []
+    with _puppeteer_lock:
+        keys_to_remove = []
+        for key, status in _puppeteer_status.items():
+            if status.get('user_id') == user_id and status.get('running'):
+                # 终止Puppeteer子进程
+                proc = status.get('process')
+                if proc and proc.poll() is None:
+                    try:
+                        import signal
+                        if os.name != 'nt':
+                            os.killpg(os.getpgid(proc.pid), signal.SIGTERM)
+                        proc.kill()
+                    except (ProcessLookupError, OSError):
+                        pass
+                keys_to_remove.append(key)
+                cancelled.append(status.get('platform'))
+        
+        for key in keys_to_remove:
+            del _puppeteer_status[key]
+    
+    if cancelled:
+        print(f"🛑 用户 {user_id} 取消了登录流程: {cancelled}")
+        return jsonify({'message': f'已取消登录流程: {", ".join(cancelled)}'}), 200
+    else:
+        return jsonify({'message': '没有正在进行的登录流程'}), 200
 
 
 @cookie_bp.route('/music-login/netease/callback', methods=['POST'])
@@ -443,6 +577,12 @@ def netease_login_callback():
         # 检测并标记VIP状态
         if _detect_netease_vip(cookie, uid):
             cookie_pool.update_vip_status(cookie_id, True)
+    else:
+        # 如果cookie已存在，检查并更新VIP状态
+        cookie_id = existing['id']
+        if not existing.get('is_vip'):
+            if _detect_netease_vip(cookie, uid):
+                cookie_pool.update_vip_status(cookie_id, True)
 
     return jsonify({
         'message': '登录成功',
@@ -689,14 +829,23 @@ def _detect_qqmusic_vip(cookie: str, uin: str) -> bool:
 
 def _run_puppeteer_login(user_id: int, platform: str):
     """运行Puppeteer登录流程（在后台线程中）"""
-    global _puppeteer_status
-    _puppeteer_status = {'running': True, 'platform': platform, 'user_id': user_id}
+    key = f"user_{user_id}_{platform}"
+    with _puppeteer_lock:
+        _puppeteer_status[key] = {'running': True, 'platform': platform, 'user_id': user_id, 'process': None}
 
     try:
         print(f"🚀 启动Puppeteer登录流程, user_id={user_id}, platform={platform}")
+        
+        # 设置环境变量，启用headless模式和Socket.IO传输
+        import os
+        os.environ['PUPPETEER_HEADLESS'] = 'true'
+        os.environ['SOCKET_URL'] = 'http://localhost:8034'
+        # 注意：AUTH_TOKEN需要从请求中获取，但_run_puppeteer_login在后台线程中运行
+        # 这里使用空token，因为Socket.IO连接会使用用户的token
+        
         if platform == 'qqmusic':
             from utils.puppeteer_login import run_qqmusic_login
-            result = run_qqmusic_login()
+            result = run_qqmusic_login(process_ref=_puppeteer_status[key])
             if result:
                 cookie = result.get('cookie') if isinstance(result, dict) else result
                 # 保存到用户Session
@@ -731,7 +880,7 @@ def _run_puppeteer_login(user_id: int, platform: str):
                 print("⚠️ Puppeteer登录未完成")
         elif platform == 'netease':
             from utils.puppeteer_login import run_netease_login
-            result = run_netease_login()
+            result = run_netease_login(process_ref=_puppeteer_status[key])
             if result:
                 cookie = result.get('cookie') if isinstance(result, dict) else result
                 uid = result.get('uid', '') or ''
@@ -786,7 +935,9 @@ def _run_puppeteer_login(user_id: int, platform: str):
     except Exception as e:
         print(f"❌ Puppeteer登录失败: {e}")
     finally:
-        _puppeteer_status = {'running': False, 'platform': None, 'user_id': None}
+        with _puppeteer_lock:
+            if key in _puppeteer_status:
+                del _puppeteer_status[key]
 
 
 import time
@@ -981,6 +1132,26 @@ def netease_playlist_songs():
             return jsonify({'message': '获取歌单详情失败'}), 500
 
         tracks = playlist_detail.get('tracks', [])
+        track_count = playlist_detail.get('trackCount', len(tracks))
+        
+        # 如果返回的tracks数量小于trackCount，使用trackIds获取所有歌曲
+        if len(tracks) < track_count:
+            track_ids = playlist_detail.get('trackIds', [])
+            if track_ids:
+                # 分批获取歌曲详情（每批最多1000首）
+                all_tracks = []
+                batch_size = 1000
+                for i in range(0, len(track_ids), batch_size):
+                    batch_ids = [item.get('id') for item in track_ids[i:i+batch_size] if item.get('id')]
+                    if batch_ids:
+                        try:
+                            batch_tracks = netease.get_song_detail(batch_ids)
+                            if batch_tracks:
+                                all_tracks.extend(batch_tracks)
+                        except Exception as e:
+                            print(f"⚠️ 获取歌曲详情批次失败: {e}")
+                tracks = all_tracks
+        
         formatted_songs = []
         for track in tracks:
             artists = '/'.join([(a.get('name') or '') for a in track.get('ar', [])])
@@ -998,7 +1169,7 @@ def netease_playlist_songs():
             'playlist_name': playlist_detail.get('name', ''),
             'count': len(formatted_songs),
             'cover_url': playlist_detail.get('coverImgUrl', ''),
-            'track_count': playlist_detail.get('trackCount', len(formatted_songs))
+            'track_count': track_count
         }), 200
     except Exception as e:
         return jsonify({'message': f'获取歌单歌曲失败: {str(e)}'}), 500
@@ -1030,42 +1201,57 @@ def qqmusic_import_playlist():
     if not session_data:
         return jsonify({'message': '无可用Cookie，请先登录QQ音乐'}), 403
 
-    song_model = Song()
-    playlist_model = Playlist()
-
     try:
         # 创建歌单（如果不存在）
         if not playlist_name:
             playlist_name = f'QQ音乐歌单_{playlist_id}'
         
         # 检查歌单是否已存在
-        existing_playlist = playlist_model.execute(
+        existing_playlist = db_queue.execute_query(
             'SELECT id FROM playlists WHERE playlist_name = ? LIMIT 1',
             (playlist_name,)
-        ).fetchone()
+        )
         
         if existing_playlist:
-            target_playlist_id = existing_playlist['id']
+            target_playlist_id = existing_playlist[0]['id']
         else:
             # 创建新歌单
-            playlist_model.execute(
+            db_queue.execute_write(
                 'INSERT INTO playlists (creater_id, playlist_name) VALUES (?, ?)',
                 (user_id, playlist_name)
             )
-            playlist_model.commit()
-            created_playlist = playlist_model.execute(
+            created_playlist = db_queue.execute_query(
                 'SELECT id FROM playlists WHERE playlist_name = ? LIMIT 1',
                 (playlist_name,)
-            ).fetchone()
-            target_playlist_id = created_playlist['id'] if created_playlist else None
+            )
+            target_playlist_id = created_playlist[0]['id'] if created_playlist else None
 
         if not target_playlist_id:
             return jsonify({'message': '创建歌单失败'}), 500
 
+        # 预加载"所有歌曲"歌单ID，避免批量操作中调用 get_or_create_all_songs_playlist
+        all_songs_rows = db_queue.execute_query(
+            "SELECT id FROM playlists WHERE playlist_name = '所有歌曲' LIMIT 1"
+        )
+        if all_songs_rows:
+            all_songs_playlist_id = all_songs_rows[0]['id']
+        else:
+            db_queue.execute_write(
+                "INSERT INTO playlists (creater_id, playlist_name) VALUES (1, '所有歌曲')"
+            )
+            all_songs_rows = db_queue.execute_query(
+                "SELECT id FROM playlists WHERE playlist_name = '所有歌曲' LIMIT 1"
+            )
+            all_songs_playlist_id = all_songs_rows[0]['id'] if all_songs_rows else None
+
         # 导入歌曲（只保存元数据和songmid，不获取播放URL）
         imported_count = 0
         failed_count = 0
-        for song_info in songs:
+        batch_size = 500
+        
+        batch_ops = []
+        
+        for idx, song_info in enumerate(songs):
             try:
                 songmid = song_info.get('songmid', '')
                 title = song_info.get('title', songmid)
@@ -1076,60 +1262,60 @@ def qqmusic_import_playlist():
                     failed_count += 1
                     continue
 
-                # 检查歌曲是否已存在（通过平台song_id或title+artist）
-                existing_song = song_model.execute(
+                # 检查歌曲是否已存在
+                existing_song = db_queue.execute_query(
                     'SELECT id FROM songs WHERE (platform = ? AND platform_song_id = ?) OR (title = ? AND artist = ?) LIMIT 1',
                     ('qqmusic', songmid, title, artist)
-                ).fetchone()
-
-                if existing_song:
-                    # 歌曲已存在，添加到歌单
-                    song_id = existing_song['id']
-                    try:
-                        playlist_model.add_song_to_playlist(target_playlist_id, song_id)
-                    except Exception:
-                        pass  # 可能已经在歌单中
-                    # 确保也加入"所有歌曲"歌单
-                    try:
-                        playlist_model.add_song_to_playlist(playlist_model.get_or_create_all_songs_playlist(), song_id)
-                    except Exception:
-                        pass
-                    imported_count += 1
-                    continue
-
-                # 保存到songs表（不获取播放URL，播放时动态获取）
-                song_model.add_song(
-                    title=title,
-                    artist=artist,
-                    duration=duration,
-                    file_path='',  # 不存储URL，播放时动态获取
-                    uploader_id=user_id,
-                    file_extension='m4a',
-                    platform='qqmusic',
-                    platform_song_id=songmid
                 )
 
-                # 获取新创建的歌曲ID
-                new_song = song_model.execute(
-                    'SELECT id FROM songs WHERE platform = ? AND platform_song_id = ? LIMIT 1',
-                    ('qqmusic', songmid)
-                ).fetchone()
-
-                if new_song:
-                    # 添加到"所有歌曲"歌单
-                    try:
-                        playlist_model.add_song_to_playlist(playlist_model.get_or_create_all_songs_playlist(), new_song['id'])
-                    except Exception:
-                        pass
-                    # 添加到目标歌单
-                    playlist_model.add_song_to_playlist(target_playlist_id, new_song['id'])
+                if existing_song:
+                    song_id = existing_song[0]['id']
+                    # 添加到目标歌单和所有歌曲歌单
+                    batch_ops.append(
+                        ('INSERT OR IGNORE INTO playlist_songs (playlist_id, song_id, order_index) SELECT ?, ?, COALESCE(MAX(order_index), 0) + 1 FROM playlist_songs WHERE playlist_id = ?',
+                         (target_playlist_id, song_id, target_playlist_id))
+                    )
+                    if all_songs_playlist_id:
+                        batch_ops.append(
+                            ('INSERT OR IGNORE INTO playlist_songs (playlist_id, song_id, order_index) SELECT ?, ?, COALESCE(MAX(order_index), 0) + 1 FROM playlist_songs WHERE playlist_id = ?',
+                             (all_songs_playlist_id, song_id, all_songs_playlist_id))
+                        )
                     imported_count += 1
                 else:
-                    failed_count += 1
+                    # 插入新歌曲
+                    batch_ops.append(
+                        ('INSERT INTO songs (title, artist, duration, file_path, uploader_id, file_extension, platform, platform_song_id) VALUES (?, ?, ?, ?, ?, ?, ?, ?)',
+                         (title, artist, duration, '', user_id, 'm4a', 'qqmusic', songmid))
+                    )
+                    # 添加到歌单（使用子查询获取刚插入的song_id）
+                    batch_ops.append(
+                        ('INSERT OR IGNORE INTO playlist_songs (playlist_id, song_id, order_index) SELECT ?, id, COALESCE(ps.max_order, 0) + 1 FROM songs s CROSS JOIN (SELECT MAX(order_index) as max_order FROM playlist_songs WHERE playlist_id = ?) ps WHERE s.platform = ? AND s.platform_song_id = ?',
+                         (all_songs_playlist_id, all_songs_playlist_id, 'qqmusic', songmid) if all_songs_playlist_id else (target_playlist_id, target_playlist_id, 'qqmusic', songmid))
+                    )
+                    batch_ops.append(
+                        ('INSERT OR IGNORE INTO playlist_songs (playlist_id, song_id, order_index) SELECT ?, id, COALESCE(ps.max_order, 0) + 1 FROM songs s CROSS JOIN (SELECT MAX(order_index) as max_order FROM playlist_songs WHERE playlist_id = ?) ps WHERE s.platform = ? AND s.platform_song_id = ?',
+                         (target_playlist_id, target_playlist_id, 'qqmusic', songmid))
+                    )
+                    imported_count += 1
 
             except Exception as e:
                 print(f"导入歌曲失败: {e}")
                 failed_count += 1
+
+            # 每 batch_size 首提交一次，释放写锁
+            if (idx + 1) % batch_size == 0:
+                try:
+                    db_queue.execute_batch(batch_ops)
+                except Exception as e:
+                    print(f"批量提交失败: {e}")
+                batch_ops = []
+
+        # 提交剩余操作
+        if batch_ops:
+            try:
+                db_queue.execute_batch(batch_ops)
+            except Exception as e:
+                print(f"批量提交失败: {e}")
 
         return jsonify({
             'message': f'导入完成: 成功 {imported_count} 首, 失败 {failed_count} 首',
@@ -1138,6 +1324,7 @@ def qqmusic_import_playlist():
             'playlist_id': target_playlist_id,
             'playlist_name': playlist_name
         }), 200
+            
     except Exception as e:
         return jsonify({'message': f'导入歌单失败: {str(e)}'}), 500
 
@@ -1162,42 +1349,57 @@ def netease_import_playlist():
     if not songs:
         return jsonify({'message': 'songs is required'}), 400
 
-    song_model = Song()
-    playlist_model = Playlist()
-
     try:
         # 创建歌单（如果不存在）
         if not playlist_name:
             playlist_name = f'网易云歌单_{playlist_id}'
         
         # 检查歌单是否已存在
-        existing_playlist = playlist_model.execute(
+        existing_playlist = db_queue.execute_query(
             'SELECT id FROM playlists WHERE playlist_name = ? LIMIT 1',
             (playlist_name,)
-        ).fetchone()
+        )
         
         if existing_playlist:
-            target_playlist_id = existing_playlist['id']
+            target_playlist_id = existing_playlist[0]['id']
         else:
             # 创建新歌单
-            playlist_model.execute(
+            db_queue.execute_write(
                 'INSERT INTO playlists (creater_id, playlist_name) VALUES (?, ?)',
                 (user_id, playlist_name)
             )
-            playlist_model.commit()
-            created_playlist = playlist_model.execute(
+            created_playlist = db_queue.execute_query(
                 'SELECT id FROM playlists WHERE playlist_name = ? LIMIT 1',
                 (playlist_name,)
-            ).fetchone()
-            target_playlist_id = created_playlist['id'] if created_playlist else None
+            )
+            target_playlist_id = created_playlist[0]['id'] if created_playlist else None
 
         if not target_playlist_id:
             return jsonify({'message': '创建歌单失败'}), 500
 
+        # 预加载"所有歌曲"歌单ID，避免批量操作中调用 get_or_create_all_songs_playlist
+        all_songs_rows = db_queue.execute_query(
+            "SELECT id FROM playlists WHERE playlist_name = '所有歌曲' LIMIT 1"
+        )
+        if all_songs_rows:
+            all_songs_playlist_id = all_songs_rows[0]['id']
+        else:
+            db_queue.execute_write(
+                "INSERT INTO playlists (creater_id, playlist_name) VALUES (1, '所有歌曲')"
+            )
+            all_songs_rows = db_queue.execute_query(
+                "SELECT id FROM playlists WHERE playlist_name = '所有歌曲' LIMIT 1"
+            )
+            all_songs_playlist_id = all_songs_rows[0]['id'] if all_songs_rows else None
+
         # 导入歌曲（只保存元数据和song_id，不获取播放URL）
         imported_count = 0
         failed_count = 0
-        for song_info in songs:
+        batch_size = 500
+        
+        batch_ops = []
+        
+        for idx, song_info in enumerate(songs):
             try:
                 netease_song_id = song_info.get('song_id', '')
                 title = song_info.get('title', str(netease_song_id))
@@ -1208,60 +1410,60 @@ def netease_import_playlist():
                     failed_count += 1
                     continue
 
-                # 检查歌曲是否已存在（通过平台song_id或title+artist）
-                existing_song = song_model.execute(
+                # 检查歌曲是否已存在
+                existing_song = db_queue.execute_query(
                     'SELECT id FROM songs WHERE (platform = ? AND platform_song_id = ?) OR (title = ? AND artist = ?) LIMIT 1',
                     ('netease', str(netease_song_id), title, artist)
-                ).fetchone()
+                )
 
                 if existing_song:
-                    # 歌曲已存在，添加到歌单
-                    song_id = existing_song['id']
-                    try:
-                        playlist_model.add_song_to_playlist(target_playlist_id, song_id)
-                    except Exception:
-                        pass  # 可能已经在歌单中
-                    # 确保也加入"所有歌曲"歌单
-                    try:
-                        playlist_model.add_song_to_playlist(playlist_model.get_or_create_all_songs_playlist(), song_id)
-                    except Exception:
-                        pass
-                    imported_count += 1
-                    continue
-
-                # 保存到songs表（不获取播放URL，播放时动态获取）
-                song_model.add_song(
-                    title=title,
-                    artist=artist,
-                    duration=duration,
-                    file_path=None,  # 不存储URL，播放时动态获取
-                    uploader_id=user_id,
-                    file_extension='mp3',
-                    platform='netease',
-                    platform_song_id=str(netease_song_id)
-                )
-                
-                # 获取新创建的歌曲ID
-                new_song = song_model.execute(
-                    'SELECT id FROM songs WHERE platform = ? AND platform_song_id = ? LIMIT 1',
-                    ('netease', str(netease_song_id))
-                ).fetchone()
-                
-                if new_song:
-                    # 添加到"所有歌曲"歌单
-                    try:
-                        playlist_model.add_song_to_playlist(playlist_model.get_or_create_all_songs_playlist(), new_song['id'])
-                    except Exception:
-                        pass
-                    # 添加到目标歌单
-                    playlist_model.add_song_to_playlist(target_playlist_id, new_song['id'])
+                    song_id = existing_song[0]['id']
+                    # 添加到目标歌单和所有歌曲歌单
+                    batch_ops.append(
+                        ('INSERT OR IGNORE INTO playlist_songs (playlist_id, song_id, order_index) SELECT ?, ?, COALESCE(MAX(order_index), 0) + 1 FROM playlist_songs WHERE playlist_id = ?',
+                         (target_playlist_id, song_id, target_playlist_id))
+                    )
+                    if all_songs_playlist_id:
+                        batch_ops.append(
+                            ('INSERT OR IGNORE INTO playlist_songs (playlist_id, song_id, order_index) SELECT ?, ?, COALESCE(MAX(order_index), 0) + 1 FROM playlist_songs WHERE playlist_id = ?',
+                             (all_songs_playlist_id, song_id, all_songs_playlist_id))
+                        )
                     imported_count += 1
                 else:
-                    failed_count += 1
+                    # 插入新歌曲
+                    batch_ops.append(
+                        ('INSERT INTO songs (title, artist, duration, file_path, uploader_id, file_extension, platform, platform_song_id) VALUES (?, ?, ?, ?, ?, ?, ?, ?)',
+                         (title, artist, duration, None, user_id, 'mp3', 'netease', str(netease_song_id)))
+                    )
+                    # 添加到歌单（使用子查询获取刚插入的song_id）
+                    batch_ops.append(
+                        ('INSERT OR IGNORE INTO playlist_songs (playlist_id, song_id, order_index) SELECT ?, id, COALESCE(ps.max_order, 0) + 1 FROM songs s CROSS JOIN (SELECT MAX(order_index) as max_order FROM playlist_songs WHERE playlist_id = ?) ps WHERE s.platform = ? AND s.platform_song_id = ?',
+                         (all_songs_playlist_id, all_songs_playlist_id, 'netease', str(netease_song_id)) if all_songs_playlist_id else (target_playlist_id, target_playlist_id, 'netease', str(netease_song_id)))
+                    )
+                    batch_ops.append(
+                        ('INSERT OR IGNORE INTO playlist_songs (playlist_id, song_id, order_index) SELECT ?, id, COALESCE(ps.max_order, 0) + 1 FROM songs s CROSS JOIN (SELECT MAX(order_index) as max_order FROM playlist_songs WHERE playlist_id = ?) ps WHERE s.platform = ? AND s.platform_song_id = ?',
+                         (target_playlist_id, target_playlist_id, 'netease', str(netease_song_id)))
+                    )
+                    imported_count += 1
 
             except Exception as e:
                 print(f"导入歌曲失败: {e}")
                 failed_count += 1
+
+            # 每 batch_size 首提交一次，释放写锁
+            if (idx + 1) % batch_size == 0:
+                try:
+                    db_queue.execute_batch(batch_ops)
+                except Exception as e:
+                    print(f"批量提交失败: {e}")
+                batch_ops = []
+
+        # 提交剩余操作
+        if batch_ops:
+            try:
+                db_queue.execute_batch(batch_ops)
+            except Exception as e:
+                print(f"批量提交失败: {e}")
 
         return jsonify({
             'message': f'导入完成: 成功 {imported_count} 首, 失败 {failed_count} 首',
@@ -1272,6 +1474,7 @@ def netease_import_playlist():
             'cover_url': cover_url,
             'track_count': track_count
         }), 200
+            
     except Exception as e:
         return jsonify({'message': f'导入歌单失败: {str(e)}'}), 500
 
@@ -1370,27 +1573,54 @@ def _verify_netease_cookie(cookie: str) -> bool:
     """验证网易云音乐Cookie是否有效"""
     try:
         netease = NeteaseMusicTool(cookie=cookie, timeout=10)
-        # 尝试获取用户信息
-        user_info = netease.get_user_account()
-        return bool(user_info and user_info.get('code') == 200)
+        profile = netease.get_user_account()
+        return bool(profile and profile.get('userId'))
     except Exception:
         return False
 
 
 def _detect_netease_vip(cookie: str, uid: str) -> bool:
-    """检测网易云音乐用户是否为VIP"""
+    """检测网易云音乐用户是否为VIP（黑胶）"""
     try:
         netease = NeteaseMusicTool(cookie=cookie, timeout=10)
-        user_info = netease.get_user_account()
+        # 获取完整API数据
+        user_info = netease.get_user_account(origin=True)
         if not user_info or user_info.get('code') != 200:
+            print(f"⚠️ 网易云VIP检测: API返回异常 code={user_info.get('code') if user_info else 'None'}")
             return False
-        # 检查VIP相关字段
-        account = user_info.get('account', {})
-        # vipType > 0 表示VIP用户
-        if account.get('vipType', 0) > 0:
+        
+        account = user_info.get('account') or {}
+        profile = user_info.get('profile') or {}
+        
+        # 方法1: 检查account.vipType（最可靠的字段）
+        # 0=普通用户, 10=黑胶VIP, 11=黑胶SVIP
+        vip_type = int(account.get('vipType') or 0)
+        print(f"🔍 网易云VIP检测 uid={uid}: account.vipType={vip_type}")
+        if vip_type > 0:
             return True
-        # 也可以检查其他字段
+        
+        # 方法2: 检查profile.vipType
+        profile_vip_type = int(profile.get('vipType') or 0)
+        print(f"🔍 网易云VIP检测 uid={uid}: profile.vipType={profile_vip_type}")
+        if profile_vip_type > 0:
+            return True
+        
+        # 方法3: 检查account.paidFee（付费金额/布尔值）
+        paid_fee = account.get('paidFee')
+        print(f"🔍 网易云VIP检测 uid={uid}: account.paidFee={paid_fee}")
+        if paid_fee and paid_fee != 0:
+            return True
+        
+        # 方法4: 检查profile.vipRights（VIP权益信息）
+        vip_rights = profile.get('vipRights') or {}
+        if vip_rights:
+            associator = vip_rights.get('associator') or {}
+            if associator.get('rights'):
+                print(f"🔍 网易云VIP检测 uid={uid}: profile.vipRights.associator.rights=True")
+                return True
+        
+        print(f"🔍 网易云VIP检测 uid={uid}: 未检测到VIP状态")
         return False
     except Exception as e:
-        print(f"⚠️ 网易云VIP检测失败: {e}")
+        print(f"⚠️ 网易云VIP检测失败 uid={uid}: {e}")
         return False

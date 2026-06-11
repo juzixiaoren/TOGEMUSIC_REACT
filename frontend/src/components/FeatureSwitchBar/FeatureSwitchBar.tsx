@@ -53,14 +53,14 @@ export default function FeatureSwitchBar({ selectedKey, onChange }: FeatureSwitc
     }, [selectedKey, onChange]);
 
     // 容器样式 - 毛玻璃效果
-    const barClass = "w-[min(780px,92%)] min-h-[68px] mx-auto p-2.5 rounded-full flex items-center justify-between gap-2 bg-black/10 border-[3px] border-white/30 backdrop-blur-xl";
+    const barClass = "w-[min(780px,92%)] min-h-[68px] mx-auto p-2.5 rounded-full flex items-center justify-between gap-2 bg-black/10 dark:bg-white/10 border-[3px] border-white/30 dark:border-white/15 backdrop-blur-xl";
 
     // 按钮基础样式
     const btnBaseClass = "flex-1 min-h-12 border-none rounded-full font-mcfont text-base font-bold cursor-pointer bg-transparent text-platform-green transition-all duration-200 ease-in-out";
     // 按钮 hover 样式
-    const btnHoverClass = "hover:bg-white/25";
+    const btnHoverClass = "hover:bg-white/25 dark:hover:bg-white/15";
     // 按钮 active 样式
-    const btnActiveClass = "bg-white/50 shadow-active-white";
+    const btnActiveClass = "bg-white/50 dark:bg-white/20 shadow-active-white";
 
     return (
         <div className={barClass} role="tablist" aria-label="功能切换">

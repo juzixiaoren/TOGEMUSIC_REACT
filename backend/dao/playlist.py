@@ -17,6 +17,8 @@ class Playlist:
                 check_same_thread=True
             )
             self.local.conn.row_factory = sqlite3.Row
+            self.local.conn.execute("PRAGMA journal_mode=WAL;")
+            self.local.conn.execute("PRAGMA busy_timeout=5000;")
         return self.local.conn
     
     def execute(self, query, params=()):
@@ -98,14 +100,15 @@ class Playlist:
         total = count_cursor.fetchone()[0]
         return items, total
     
-    def add_song_to_playlist(self, playlist_id, song_id):
+    def add_song_to_playlist(self, playlist_id, song_id, auto_commit=True):
         # Get max order_index
         cursor = self.execute("SELECT MAX(order_index) FROM playlist_songs WHERE playlist_id = ?", (playlist_id,))
         row = cursor.fetchone()
         max_order = row[0] if row[0] is not None else 0
         self.execute("INSERT INTO playlist_songs (playlist_id, song_id, order_index) VALUES (?, ?, ?)",
                      (playlist_id, song_id, max_order + 1))
-        self.commit()
+        if auto_commit:
+            self.commit()
     
     def remove_song_from_playlist(self, playlist_id, song_id):
         self.execute("DELETE FROM playlist_songs WHERE playlist_id = ? AND song_id = ?", (playlist_id, song_id))

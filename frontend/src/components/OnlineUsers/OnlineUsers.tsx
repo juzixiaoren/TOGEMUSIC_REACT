@@ -38,7 +38,7 @@ export default function OnlineUsers({ users }: OnlineUsersProps) {
 
     if (users.length === 0) {
         return (
-            <div className="bg-white rounded-2xl p-6 shadow-panel mt-4">
+            <div className="bg-surface rounded-2xl p-6 shadow-panel mt-4">
                 <div className="flex items-center justify-center gap-2">
                     <span className="w-2 h-2 rounded-full inline-block bg-text-tertiary"></span>
                     <span className="text-sm font-medium text-text-secondary">暂无在线用户</span>
@@ -48,7 +48,7 @@ export default function OnlineUsers({ users }: OnlineUsersProps) {
     }
 
     return (
-        <div className="bg-white rounded-2xl p-6 shadow-panel mt-4">
+        <div className="bg-surface rounded-2xl p-6 shadow-panel mt-4">
             <div className="flex items-center justify-center gap-2 mb-4">
                 <span className="w-2 h-2 rounded-full inline-block bg-success shadow-green-sm"></span>
                 <span className="text-sm font-medium text-text-secondary">{users.length} 人在线</span>

@@ -346,15 +346,48 @@ type FeatureSwitchBarProps = {
 
 ### 8.1 全局样式
 
-**文件位置**: `frontend/src/styles/base.css`
+**文件位置**: `frontend/src/index.css`
 
 **包含**:
-- CSS变量定义
-- 通用样式重置
-- 响应式断点
-- 通用工具类
+- CSS变量定义（浅色/深色模式）
+- Tailwind指令导入
+- 全局基础样式
+- 自定义字体
+- 全局工具类
 
-### 8.2 组件样式
+### 8.2 深色模式系统
+
+**实现方式**: CSS变量 + Tailwind CSS `darkMode: 'class'`
+
+**核心文件**:
+- `frontend/src/context/DarkModeContext.tsx` - 深色模式状态管理
+- `frontend/tailwind.config.js` - Tailwind颜色令牌配置
+- `frontend/src/index.css` - CSS变量定义
+
+**工作原理**:
+1. `DarkModeContext` 在 `<html>` 元素上添加/移除 `dark` 类
+2. CSS变量根据 `.dark` 选择器自动切换值
+3. Tailwind CSS令牌通过 `var(--color-xxx)` 引用CSS变量
+4. 组件使用统一的Tailwind类名（如 `bg-surface`、`text-text-primary`）
+
+**颜色令牌系统**:
+```javascript
+// tailwind.config.js 示例
+colors: {
+  surface: 'var(--color-surface)',
+  'text-primary': 'var(--color-text-primary)',
+  'surface-card': 'var(--color-surface-card)',
+  'surface-elevated': 'var(--color-surface-elevated)',
+  // ... 更多令牌
+}
+```
+
+**三层表面令牌**:
+1. `surface` → 主背景色
+2. `surface-card` → 卡片背景
+3. `surface-elevated` → 悬浮元素背景
+
+### 8.3 组件样式
 
 **组织方式**: 每个组件目录下独立的CSS文件
 
@@ -372,7 +405,7 @@ components/
     └── MusicLogin.css
 ```
 
-### 8.3 页面样式
+### 8.4 页面样式
 
 **文件位置**:
 - `frontend/src/pages/LoginPage/LoginPage.css`
@@ -496,6 +529,6 @@ components/
 
 ---
 
-**最后更新**: 2026-06-10  
+**最后更新**: 2026-06-11  
 **维护者**: AI Assistant  
-**文档版本**: 1.0
+**文档版本**: 1.1

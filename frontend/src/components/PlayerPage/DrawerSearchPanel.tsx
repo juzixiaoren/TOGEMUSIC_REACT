@@ -25,7 +25,7 @@ const CL = {
     playlistHeader: 'flex items-center gap-2 p-2.5 px-3 bg-surface-muted',
     expandBtn: 'bg-none border-none cursor-pointer p-0 text-xs text-text-quaternary w-5',
     playlistName: 'flex-1 font-medium overflow-hidden text-ellipsis whitespace-nowrap text-[13px] text-text-primary',
-    selectBtn: 'bg-surface cursor-pointer py-[3px] px-2 text-[11px] border border-border rounded text-text-secondary',
+    selectBtn: 'bg-surface-elevated cursor-pointer py-[3px] px-2 text-[11px] border border-border rounded text-text-secondary hover:bg-surface-elevated-hover',
     // 歌曲列表 - 不限制高度，由父容器滚动
     songsList: 'list-none py-2 px-3 bg-surface-gray-light',
     // 歌单内筛选输入框
@@ -49,7 +49,7 @@ const CL = {
     resultInfo: 'flex-1 min-w-0',
     resultTitle: 'font-medium overflow-hidden text-ellipsis whitespace-nowrap text-[13px] text-text-primary',
     resultArtist: 'mt-0.5 overflow-hidden text-ellipsis whitespace-nowrap text-[11px] text-text-quaternary',
-    resultImportBtn: 'bg-surface cursor-pointer whitespace-nowrap py-[5px] px-3 border border-primary text-primary rounded text-xs transition-all duration-200 hover:bg-primary hover:text-white',
+    resultImportBtn: 'bg-surface-elevated cursor-pointer whitespace-nowrap py-[5px] px-3 border border-primary text-primary rounded text-xs transition-all duration-200 hover:bg-primary hover:text-white',
     resultImported: 'border-success-light text-success-light cursor-default',
     resultDisabled: 'opacity-60 cursor-not-allowed',
     emptyHint: 'flex items-center justify-center h-[120px] text-text-muted text-[13px]',

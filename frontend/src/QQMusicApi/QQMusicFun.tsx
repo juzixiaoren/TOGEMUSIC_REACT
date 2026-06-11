@@ -121,7 +121,7 @@ export default function QQMusicFun() {
             />
             <ul>
                 {items.map((item) => (
-                    <li key={item.songmid} className="flex items-center p-2.5 border border-dotted border-[#f0e9e9]">
+                    <li key={item.songmid} className="flex items-center p-2.5 border border-dotted border-border-pink">
                         {item.title} - {item.artist}
                         <button
                             className="relative ml-auto"
@@ -135,7 +135,7 @@ export default function QQMusicFun() {
                     </li>
                 ))}
             </ul>
-            <button onClick={searchMusic} disabled={loading} className="h-[50px] px-10 border border-[#1db954] bg-[#1db954] text-white rounded-b-[20px] rounded-t-none cursor-pointer block mx-auto">
+            <button onClick={searchMusic} disabled={loading} className="h-[50px] px-10 border border-platform-qq-mid bg-platform-qq-mid text-white rounded-b-[20px] rounded-t-none cursor-pointer block mx-auto">
                 {loading ? '搜索中...' : 'QQ 音乐搜索'}
             </button>
         </div >

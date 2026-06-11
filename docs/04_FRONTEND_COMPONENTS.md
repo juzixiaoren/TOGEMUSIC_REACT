@@ -65,7 +65,72 @@ frontend/
 
 ## 3. 状态管理 (Context)
 
-### 3.1 MessageContext
+### 3.1 DarkModeContext
+
+**文件位置**: `frontend/src/context/DarkModeContext.tsx`
+
+**功能**: 深色模式状态管理，支持浅色/深色主题切换。
+
+**接口定义**:
+```typescript
+interface DarkModeContextType {
+    isDark: boolean;                    // 是否为深色模式
+    toggleDarkMode: () => void;         // 切换深色模式
+}
+```
+
+**使用方法**:
+```typescript
+const { isDark, toggleDarkMode } = useDarkMode();
+```
+
+**实现细节**:
+- 初始状态从 `localStorage` 读取，若无则根据系统偏好自动设置
+- 切换时在 `<html>` 元素上添加/移除 `dark` 类
+- 状态持久化到 `localStorage`
+- 通过 CSS 变量驱动所有颜色变化
+
+**CSS变量驱动机制**:
+```css
+:root {
+  --color-surface: #ffffff;
+  --color-text-primary: #333333;
+  /* ... 其他浅色变量 */
+}
+
+.dark {
+  --color-surface: #1e1e2e;
+  --color-text-primary: #e0e0e0;
+  /* ... 其他深色变量 */
+}
+```
+
+**Tailwind配置**:
+```javascript
+// tailwind.config.js
+module.exports = {
+  darkMode: 'class',
+  theme: {
+    extend: {
+      colors: {
+        surface: 'var(--color-surface)',
+        'text-primary': 'var(--color-text-primary)',
+        // ... 其他令牌
+      }
+    }
+  }
+}
+```
+
+**代码位置**:
+- Context定义: 第4-9行
+- Provider实现: 第28-50行
+- useDarkMode Hook: 第12-18行
+- 初始状态获取: 第20-26行
+
+---
+
+### 3.2 MessageContext
 
 **文件位置**: `frontend/src/context/MessageContext.tsx`
 
@@ -737,41 +802,47 @@ axios.defaults.baseURL = '/api';
 **文件位置**: `frontend/src/App.tsx`
 
 **功能**:
-- 包裹MessageProvider
+- 包裹DarkModeProvider和MessageProvider
 - 配置RouterProvider
+- 渲染深色模式切换按钮
 
 **Context层次**:
 ```
-<MessageProvider>
-    <RouterProvider>
-        {/* 路由页面 */}
-    </RouterProvider>
-</MessageProvider>
+<DarkModeProvider>
+    <MessageProvider>
+        <RouterProvider>
+            {/* 路由页面 */}
+        </RouterProvider>
+    </MessageProvider>
+    <DarkModeToggle />
+</DarkModeProvider>
 ```
 
 ## 9. 组件调用关系图
 
 ```
 App.tsx
-├── MessageProvider (context/MessageContext.tsx)
-│   └── RouterProvider (router/routes.tsx)
-│       ├── LoginPage (pages/LoginPage/)
-│       └── HomePage (pages/HomePage/)
-│           └── PlayerPage (components/PlayerPage/)
-│               ├── AudioProvider (context/AudioContext.tsx)
-│               │   └── SocketProvider (context/SocketContext.tsx)
-│               │       └── PlayerPage组件
-│               ├── PlayerPanel (播放控制)
-│               ├── PlaylistPanel (播放列表)
-│               ├── OnlineUsers (在线用户显示)
-│               └── DrawerSearchPanel (搜索导入)
-│                   ├── 歌单导入Tab
-│                   ├── QQ音乐搜索Tab
-│                   └── 网易云搜索Tab
-├── UploadMusic (components/UploadMusic/)
-│   ├── UploadDropzone (拖拽上传区)
-│   └── UploadFileTable (文件列表)
-└── MusicLogin (components/MusicLogin/)
+├── DarkModeProvider (context/DarkModeContext.tsx)
+│   ├── MessageProvider (context/MessageContext.tsx)
+│   │   └── RouterProvider (router/routes.tsx)
+│   │       ├── LoginPage (pages/LoginPage/)
+│   │       └── HomePage (pages/HomePage/)
+│   │           └── PlayerPage (components/PlayerPage/)
+│   │               ├── AudioProvider (context/AudioContext.tsx)
+│   │               │   └── SocketProvider (context/SocketContext.tsx)
+│   │               │       └── PlayerPage组件
+│   │               ├── PlayerPanel (播放控制)
+│   │               ├── PlaylistPanel (播放列表)
+│   │               ├── OnlineUsers (在线用户显示)
+│   │               └── DrawerSearchPanel (搜索导入)
+│   │                   ├── 歌单导入Tab
+│   │                   ├── QQ音乐搜索Tab
+│   │                   └── 网易云搜索Tab
+│   ├── UploadMusic (components/UploadMusic/)
+│   │   ├── UploadDropzone (拖拽上传区)
+│   │   └── UploadFileTable (文件列表)
+│   └── MusicLogin (components/MusicLogin/)
+└── DarkModeToggle (components/DarkModeToggle.tsx)
 ```
 
 ## 10. 数据流说明
@@ -833,8 +904,9 @@ onSongImported回调 → PlayerPage刷新数据
 | 功能模块 | 文件路径 | 关键行号 |
 |----------|----------|----------|
 | 应用入口 | `frontend/src/main.tsx` | 1-39 |
-| 根组件 | `frontend/src/App.tsx` | 1-15 |
+| 根组件 | `frontend/src/App.tsx` | 1-21 |
 | 路由配置 | `frontend/src/router/routes.tsx` | 1-18 |
+| 深色模式Context | `frontend/src/context/DarkModeContext.tsx` | 1-51 |
 | 消息Context | `frontend/src/context/MessageContext.tsx` | 1-30 |
 | 音频Context | `frontend/src/context/AudioContext.tsx` | 1-265 |
 | Socket Context | `frontend/src/context/SocketContext.tsx` | 1-200 |
@@ -849,6 +921,6 @@ onSongImported回调 → PlayerPage刷新数据
 
 ---
 
-**最后更新**: 2026-06-10  
+**最后更新**: 2026-06-11  
 **维护者**: AI Assistant  
-**文档版本**: 1.0
+**文档版本**: 1.1

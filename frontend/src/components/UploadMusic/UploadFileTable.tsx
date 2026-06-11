@@ -1,6 +1,6 @@
 import type { UploadFileItem } from './types';
 
-const TABLE_CELL_CLASSES = 'border border-border-blue-light p-2.5 text-left text-xs text-[#444] align-middle';
+const TABLE_CELL_CLASSES = 'border border-border-blue-light p-2.5 text-left text-xs text-text-medium align-middle';
 const TABLE_HEADER_CLASSES = `${TABLE_CELL_CLASSES} bg-surface-soft`;
 const INPUT_CLASSES = 'w-full border border-border-blue-soft rounded-lg px-2.5 py-2 text-xs outline-none';
 const SECONDARY_BTN_CLASSES = 'border border-border-blue-muted bg-surface rounded-lg px-2.5 py-1.5 text-text-blue-muted cursor-pointer disabled:opacity-60 disabled:cursor-not-allowed';
@@ -69,7 +69,7 @@ export default function UploadFileTable({
                                 </td>
                                 <td className={TABLE_CELL_CLASSES}>{file.duration || '加载中...'}</td>
                                 <td className={TABLE_CELL_CLASSES}>
-                                    <div className="relative h-[22px] min-w-[150px] rounded-[20px] overflow-hidden" style={{ backgroundColor: '#eef0f7' }}>
+                                    <div className="relative h-[22px] min-w-[150px] rounded-[20px] overflow-hidden" style={{ backgroundColor: 'var(--color-surface-blue-light)' }}>
                                         <div className="h-full bg-primary" style={{ width: `${file.uploadProgress}%`, transition: 'width 0.25s ease' }}></div>
                                         <span className="absolute inset-0 flex items-center justify-center text-xs font-semibold text-text-blue-dark">{file.uploadProgress}%</span>
                                     </div>

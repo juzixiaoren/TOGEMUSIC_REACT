@@ -14,6 +14,7 @@ class SQLInit:
         if not self.check_db_exists():
             self.create_db()
             self.create_tables()
+        self._migrate_tables()
     
     def check_db_exists(self):
         return os.path.exists(os.path.join(self.db_path, self.db_name))
@@ -30,6 +31,8 @@ class SQLInit:
         with sqlite3.connect(db_file) as conn:
             with closing(conn.cursor()) as cursor:
                 cursor.execute("PRAGMA foreign_keys = ON;")
+                cursor.execute("PRAGMA journal_mode=WAL;")
+                cursor.execute("PRAGMA busy_timeout=5000;")
                 cursor.execute("""
         CREATE TABLE IF NOT EXISTS songs(
             id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -167,6 +170,35 @@ class SQLInit:
                 """)
                 conn.commit()
     
+    def _migrate_tables(self):
+        """检查并添加缺失的列，用于数据库升级迁移"""
+        db_file = os.path.join(self.db_path, self.db_name)
+        if not os.path.exists(db_file):
+            return
+        
+        with sqlite3.connect(db_file) as conn:
+            with closing(conn.cursor()) as cursor:
+                # 检查 playlist_songs 表是否有 order_index 列
+                cursor.execute("PRAGMA table_info(playlist_songs)")
+                columns = [col[1] for col in cursor.fetchall()]
+                
+                if 'order_index' not in columns:
+                    print("迁移: 为 playlist_songs 表添加 order_index 列...")
+                    cursor.execute("ALTER TABLE playlist_songs ADD COLUMN order_index INTEGER DEFAULT 0")
+                    # 为已有数据设置顺序值
+                    cursor.execute("""
+                        UPDATE playlist_songs 
+                        SET order_index = (
+                            SELECT COUNT(*) 
+                            FROM playlist_songs AS ps2 
+                            WHERE ps2.playlist_id = playlist_songs.playlist_id 
+                            AND ps2.song_id <= playlist_songs.song_id
+                        )
+                        WHERE order_index = 0
+                    """)
+                    conn.commit()
+                    print("迁移完成: playlist_songs.order_index 列已添加")
+
     def close(self):
         # connections are opened per-method using context managers; nothing to close
         return

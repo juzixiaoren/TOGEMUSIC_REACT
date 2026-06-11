@@ -60,6 +60,7 @@ export interface SocketEventHandlers {
 export interface SocketContextType {
     isConnected: boolean;
     onlineUsers: OnlineUser[];
+    socket: Socket | null;
     emitRequestNextSong: (callback?: (response: { success: boolean }) => void) => void;
     emitRequestPrevSong: (callback?: (response: { success: boolean }) => void) => void;
     emitRequestShuffle: (callback?: (response: { success: boolean }) => void) => void;
@@ -81,6 +82,7 @@ export const useSocket = () => {
 export const SocketProvider = ({ children }: { children: ReactNode }) => {
     const [isConnected, setIsConnected] = useState(false);
     const [onlineUsers, setOnlineUsers] = useState<OnlineUser[]>([]);
+    const [socket, setSocket] = useState<Socket | null>(null);
     const socketRef = useRef<Socket | null>(null);
     const handlersRef = useRef<SocketEventHandlers>({});
 
@@ -109,6 +111,7 @@ export const SocketProvider = ({ children }: { children: ReactNode }) => {
         });
 
         socketRef.current = socket;
+        setSocket(socket);
 
         socket.on('connect', () => {
             console.log('Socket 已连接');
@@ -185,6 +188,7 @@ export const SocketProvider = ({ children }: { children: ReactNode }) => {
         return () => {
             socket.disconnect();
             socketRef.current = null;
+            setSocket(null);
         };
     }, []);
 
@@ -213,6 +217,7 @@ export const SocketProvider = ({ children }: { children: ReactNode }) => {
         <SocketContext.Provider value={{
             isConnected,
             onlineUsers,
+            socket,
             emitRequestNextSong,
             emitRequestPrevSong,
             emitRequestShuffle,

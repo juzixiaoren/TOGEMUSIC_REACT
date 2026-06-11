@@ -204,11 +204,16 @@ def create_app():
     # 初始化 SocketIO（只初始化一次，避免运行模式冲突）
     print(f"✅ SocketIO init with CORS: {cors_origins}")
     socketio.init_app(app, cors_allowed_origins=cors_origins)
+    
+    # 注册Cookie模块的Socket.IO事件
+    from routes.cookie import register_socketio_events
+    register_socketio_events(socketio)
 
     # ===== WebSocket 事件处理 =====
     @socketio.on('connect')
     def handle_connect(auth=None):
         """客户端连接时，发送当前状态（初始化同步）"""
+        from flask_socketio import join_room
         print(f"✅ Client connected: {request.sid}, auth: {auth}")
         try:
             # 从auth参数获取token（客户端通过 auth: { token } 发送）
@@ -222,8 +227,10 @@ def create_app():
                             'user_id': user_id,
                             'username': username
                         }
+                        # 加入用户专属房间，用于接收定向消息（如登录截图）
+                        join_room(f'user_{user_id}')
                         broadcast_online_users()
-                        print(f"✅ 用户 {username} (ID: {user_id}) 已上线")
+                        print(f"✅ 用户 {username} (ID: {user_id}) 已上线, 已加入房间 user_{user_id}")
             
             # 发送当前播放状态
             status = song_model.get_play_status()

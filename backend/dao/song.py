@@ -15,6 +15,8 @@ class Song:
                 check_same_thread=True
             )
             self.local.conn.row_factory = sqlite3.Row
+            self.local.conn.execute("PRAGMA journal_mode=WAL;")
+            self.local.conn.execute("PRAGMA busy_timeout=5000;")
         return self.local.conn
     def execute(self, query, params=()):
         conn= self.get_conn()
@@ -32,10 +34,11 @@ class Song:
         cursor = self.execute("SELECT * FROM songs WHERE id = ?", (song_id,))
         return cursor.fetchone()
     
-    def add_song(self, title, artist, duration, file_path, uploader_id, file_extension, platform='local', platform_song_id=None):
+    def add_song(self, title, artist, duration, file_path, uploader_id, file_extension, platform='local', platform_song_id=None, auto_commit=True):
         cursor = self.execute("INSERT INTO songs (title, artist, duration, file_path, uploader_id, file_extension, platform, platform_song_id) VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
                      (title, artist, duration, file_path, uploader_id, file_extension, platform, platform_song_id))
-        self.commit()
+        if auto_commit:
+            self.commit()
         return cursor.lastrowid
     def get_play_status(self):
         cursor = self.execute("""

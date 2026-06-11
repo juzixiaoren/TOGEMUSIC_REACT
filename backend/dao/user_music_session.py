@@ -21,6 +21,8 @@ class UserMusicSession:
                 check_same_thread=True
             )
             self.local.conn.row_factory = sqlite3.Row
+            self.local.conn.execute("PRAGMA journal_mode=WAL;")
+            self.local.conn.execute("PRAGMA busy_timeout=5000;")
         return self.local.conn
 
     def execute(self, query, params=()):
@@ -71,14 +73,7 @@ class UserMusicSession:
             (user_id, platform)
         ).fetchone()
         if row:
-            result = dict(row)
-            # 更新最后使用时间
-            self.execute(
-                "UPDATE user_music_sessions SET last_used_at = ? WHERE id = ?",
-                (datetime.utcnow().isoformat(), result['id'])
-            )
-            self.commit()
-            return result
+            return dict(row)
         return None
 
     def get_session_data(self, user_id: int, platform: str = 'qqmusic') -> Optional[str]:

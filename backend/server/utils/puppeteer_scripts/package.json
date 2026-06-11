@@ -4,6 +4,7 @@
   "description": "Puppeteer scripts for music platform login",
   "private": true,
   "dependencies": {
-    "puppeteer": "^21.11.0"
+    "puppeteer": "^21.11.0",
+    "socket.io-client": "^4.7.4"
   }
 }

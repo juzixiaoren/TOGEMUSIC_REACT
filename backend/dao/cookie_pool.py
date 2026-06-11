@@ -22,6 +22,8 @@ class CookiePool:
                 check_same_thread=True
             )
             self.local.conn.row_factory = sqlite3.Row
+            self.local.conn.execute("PRAGMA journal_mode=WAL;")
+            self.local.conn.execute("PRAGMA busy_timeout=5000;")
         return self.local.conn
 
     def execute(self, query, params=()):

@@ -5,7 +5,7 @@ const CL = {
     panel: 'bg-surface rounded-2xl flex flex-col min-w-0 flex-1 p-6 shadow-panel max-[1100px]:w-full',
     header: 'flex justify-between items-center mb-5 border-b-2 border-surface-gray pb-3',
     actions: 'flex gap-2.5',
-    actionBtn: 'bg-surface cursor-pointer py-2.5 px-3.5 border border-border rounded-lg text-[13px] text-text-secondary font-medium -translate-y-1.5',
+    actionBtn: 'bg-surface-elevated cursor-pointer py-2.5 px-3.5 border border-border rounded-lg text-[13px] text-text-secondary font-medium -translate-y-1.5 hover:bg-surface-elevated-hover',
     queue: 'list-none p-0 m-0 flex-1 overflow-y-auto',
     item: 'flex items-center p-3 px-[15px] mb-2 bg-surface-muted rounded-lg',
     itemCurrent: 'bg-primary/10 border-l-4 border-primary',

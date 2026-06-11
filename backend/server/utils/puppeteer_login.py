@@ -11,10 +11,34 @@ import tempfile
 from typing import Optional
 
 
-def run_qqmusic_login(timeout: int = 300) -> Optional[dict]:
+def _kill_process_tree(process: subprocess.Popen):
+    """终止进程及其所有子进程"""
+    try:
+        import signal
+        if os.name == 'nt':
+            # Windows: 使用 taskkill /T 终止进程树
+            subprocess.run(['taskkill', '/F', '/T', '/PID', str(process.pid)],
+                           capture_output=True, timeout=5)
+        else:
+            # Unix: 使用 os.killpg 终止进程组
+            os.killpg(os.getpgid(process.pid), signal.SIGTERM)
+            try:
+                process.wait(timeout=3)
+            except subprocess.TimeoutExpired:
+                os.killpg(os.getpgid(process.pid), signal.SIGKILL)
+    except (ProcessLookupError, OSError):
+        pass
+    try:
+        process.kill()
+    except (ProcessLookupError, OSError):
+        pass
+
+
+def run_qqmusic_login(timeout: int = 300, process_ref: Optional[dict] = None) -> Optional[dict]:
     """
     启动QQ音乐登录流程
     返回 {'cookie': str, 'is_vip': bool} 字典，超时或失败返回None
+    process_ref: 可选字典，用于传出子进程引用供外部取消
     """
     script_path = os.path.join(os.path.dirname(__file__), 'puppeteer_scripts', 'qqmusic_login.js')
 
@@ -38,8 +62,13 @@ def run_qqmusic_login(timeout: int = 300) -> Optional[dict]:
             env=env,
             stdout=None,  # 直接输出到终端，方便查看日志
             stderr=None,
-            text=True
+            text=True,
+            start_new_session=True  # 创建新进程组，便于整体终止
         )
+
+        # 将子进程引用传出供外部取消
+        if process_ref is not None:
+            process_ref['process'] = process
 
         # 等待进程完成或超时
         try:
@@ -48,7 +77,7 @@ def run_qqmusic_login(timeout: int = 300) -> Optional[dict]:
                 print(f"❌ Puppeteer进程退出码: {process.returncode}")
                 return None
         except subprocess.TimeoutExpired:
-            process.kill()
+            _kill_process_tree(process)
             print("❌ Puppeteer登录超时")
             return None
 
@@ -76,10 +105,11 @@ def run_qqmusic_login(timeout: int = 300) -> Optional[dict]:
             pass
 
 
-def run_netease_login(timeout: int = 300) -> Optional[dict]:
+def run_netease_login(timeout: int = 300, process_ref: Optional[dict] = None) -> Optional[dict]:
     """
     启动网易云音乐登录流程
     返回 {'cookie': str, 'uid': str} 字典，超时或失败返回None
+    process_ref: 可选字典，用于传出子进程引用供外部取消
     """
     script_path = os.path.join(os.path.dirname(__file__), 'puppeteer_scripts', 'netease_login.js')
     
@@ -103,8 +133,13 @@ def run_netease_login(timeout: int = 300) -> Optional[dict]:
             env=env,
             stdout=None,  # 直接输出到终端，方便查看日志
             stderr=None,
-            text=True
+            text=True,
+            start_new_session=True  # 创建新进程组，便于整体终止
         )
+
+        # 将子进程引用传出供外部取消
+        if process_ref is not None:
+            process_ref['process'] = process
         
         # 等待进程完成或超时
         try:
@@ -113,7 +148,7 @@ def run_netease_login(timeout: int = 300) -> Optional[dict]:
                 print(f"❌ Puppeteer进程退出码: {process.returncode}")
                 return None
         except subprocess.TimeoutExpired:
-            process.kill()
+            _kill_process_tree(process)
             print("❌ Puppeteer登录超时")
             return None
         

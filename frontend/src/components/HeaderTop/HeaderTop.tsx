@@ -10,7 +10,7 @@ export default function HeaderTop({ isLogin, userId }: HeaderTopProps) {
     }
 
     // 顶部容器样式
-    const topClass = "w-screen h-[120px] overflow-hidden fixed z-[999] box-border bg-white/50 backdrop-blur-[1px] shadow-header border-b border-white/[0.115]";
+    const topClass = "w-screen h-[120px] overflow-hidden fixed z-[999] box-border bg-white/50 dark:bg-[#1a1a28]/80 backdrop-blur-[1px] shadow-header border-b border-white/[0.115] dark:border-white/[0.06]";
 
     // Logo容器样式 - 右上角正方形
     const logoClass = "absolute right-0 top-0 w-[120px] h-[120px] overflow-hidden";
@@ -21,7 +21,7 @@ export default function HeaderTop({ isLogin, userId }: HeaderTopProps) {
     const amiyaImgClass = "h-[100px]";
 
     // 退出登录按钮样式
-    const logoutBtnClass = "ml-4 px-4 py-1.5 rounded-lg border border-border-blue-input bg-surface-blue-light text-text-blue-dark font-mcfont text-sm font-bold cursor-pointer transition-all duration-200 hover:bg-surface-blue-soft hover:shadow-hover-card";
+    const logoutBtnClass = "ml-4 px-4 py-1.5 rounded-lg border border-border-blue-input bg-surface-blue-light text-text-blue-dark font-mcfont text-sm font-bold cursor-pointer transition-all duration-200 hover:bg-surface-blue-soft hover:shadow-hover-card dark:hover:bg-surface-elevated";
 
     if (!isLogin) {
         return (

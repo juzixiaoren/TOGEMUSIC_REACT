@@ -2,6 +2,130 @@
 @tailwind components;
 @tailwind utilities;
 
+/* ===== CSS 自定义属性 - 浅色模式（默认） ===== */
+:root {
+  /* 文字颜色 */
+  --color-text-primary: #333333;
+  --color-text-secondary: #666666;
+  --color-text-tertiary: #888888;
+  --color-text-quaternary: #999999;
+  --color-text-muted: #bbbbbb;
+  --color-text-dark: #262626;
+  --color-text-blue-dark: #2f3556;
+  --color-text-blue-deep: #262c47;
+  --color-text-blue-muted: #5a628a;
+  --color-text-blue-sub: #8b91af;
+  --color-text-blue-placeholder: #40486f;
+  --color-text-blue-label: #5f6687;
+  --color-text-medium: #444444;
+  --color-text-blue-gray: #9ca3bf;
+  --color-text-warning: #d46b08;
+
+  /* 背景颜色 */
+  --color-surface: #ffffff;
+  --color-surface-soft: #f6f7ff;
+  --color-surface-muted: #fafafa;
+  --color-surface-gray-light: #f9f9f9;
+  --color-surface-gray: #f5f5f5;
+  --color-surface-gray-hover: #e0e0e0;
+  --color-surface-blue-light: #f8f9ff;
+  --color-surface-blue-soft: #f4f6ff;
+  --color-surface-blue-pale: #fafbff;
+  --color-surface-blue-pick: #fcfcff;
+  --color-surface-blue-hover: #f1f4ff;
+  --color-surface-green-light: #f0fff4;
+  --color-surface-red-light: #fff2f0;
+  --color-surface-yellow-light: #fff7e6;
+  --color-surface-header: #f8f9fa;
+  --color-surface-card: #ffffff;
+  --color-surface-elevated: #ffffff;
+  --color-surface-elevated-hover: #f5f5f5;
+
+  /* 边框颜色 */
+  --color-border: #dddddd;
+  --color-border-light: #eeeeee;
+  --color-border-lighter: #f0f0f0;
+  --color-border-blue-light: #ebeef5;
+  --color-border-blue-soft: #d7dbef;
+  --color-border-blue-muted: #d0d5ec;
+  --color-border-blue-pale: #eceffd;
+  --color-border-blue-page: #d5daf1;
+  --color-border-blue-input: #d9ddef;
+  --color-border-blue-source: #e6e8f3;
+  --color-border-blue-expand: #d4d9f0;
+  --color-border-platform: #e0e0e0;
+  --color-border-platform-hover: #bbbbbb;
+  --color-border-dashed: #c7cdf8;
+  --color-border-pink: #f0e9e9;
+
+  /* 玻璃效果 */
+  --glass-bg-start: rgb(255, 254, 254);
+  --glass-bg-end: rgb(255, 255, 255);
+  --glass-border-color: rgba(0, 0, 0, 0.3);
+}
+
+/* ===== CSS 自定义属性 - 深色模式 ===== */
+.dark {
+  /* 文字颜色 */
+  --color-text-primary: #e0e0e0;
+  --color-text-secondary: #b0b0b0;
+  --color-text-tertiary: #888899;
+  --color-text-quaternary: #777788;
+  --color-text-muted: #555566;
+  --color-text-dark: #e8e8f0;
+  --color-text-blue-dark: #c8c8e0;
+  --color-text-blue-deep: #b8b8d0;
+  --color-text-blue-muted: #9090b0;
+  --color-text-blue-sub: #7878a0;
+  --color-text-blue-placeholder: #606080;
+  --color-text-blue-label: #808098;
+  --color-text-medium: #b0b0b0;
+  --color-text-blue-gray: #6a6a8a;
+  --color-text-warning: #ffa940;
+
+  /* 背景颜色 */
+  --color-surface: #4d4d5c;
+  --color-surface-soft: #5c5c6e;
+  --color-surface-muted: #3b3b4b;
+  --color-surface-gray-light: #8f8fa0;
+  --color-surface-gray: #656570;
+  --color-surface-gray-hover: #b6b6c0;
+  --color-surface-blue-light: #393958;
+  --color-surface-blue-soft: #3b3b5a;
+  --color-surface-blue-pale: #363659;
+  --color-surface-blue-pick: #3a3a60;
+  --color-surface-blue-hover: #8282da;
+  --color-surface-green-light: #74a27d;
+  --color-surface-red-light: #9f6b6b;
+  --color-surface-yellow-light: #8c8257;
+  --color-surface-header: #4d4d64;
+  --color-surface-card: #5a5a74;
+  --color-surface-elevated: #50506c;
+  --color-surface-elevated-hover: #63637b;
+
+  /* 边框颜色 */
+  --color-border: #666677;
+  --color-border-light: #6e6e7f;
+  --color-border-lighter: #282838;
+  --color-border-blue-light: #2a2a40;
+  --color-border-blue-soft: #303048;
+  --color-border-blue-muted: #353550;
+  --color-border-blue-pale: #28283c;
+  --color-border-blue-page: #2c2c42;
+  --color-border-blue-input: #303048;
+  --color-border-blue-source: #28283e;
+  --color-border-blue-expand: #32324a;
+  --color-border-platform: #3a3a4a;
+  --color-border-platform-hover: #4a4a5a;
+  --color-border-dashed: #404060;
+  --color-border-pink: #3a3a4a;
+
+  /* 玻璃效果 */
+  --glass-bg-start: rgba(30, 30, 46, 0.85);
+  --glass-bg-end: rgba(40, 40, 58, 0.85);
+  --glass-border-color: rgba(255, 255, 255, 0.1);
+}
+
 /* ===== 全局基础样式 ===== */
 *,
 *::before,
@@ -30,6 +154,12 @@ body {
   overflow-x: hidden;
 }
 
+html.dark body {
+  background-image:
+    linear-gradient(90deg, rgba(20, 20, 35, 0.7), rgba(30, 30, 50, 0.3)),
+    url(/终末地视频帧_dark.png);
+}
+
 /* ===== 自定义字体 ===== */
 @font-face {
   font-family: 'MyFont';
@@ -55,11 +185,16 @@ body {
 
 /* ===== 全局工具类 ===== */
 .glass {
-  background-image: radial-gradient(rgb(255, 254, 254), rgb(255, 255, 255));
+  background-image: radial-gradient(var(--glass-bg-start), var(--glass-bg-end));
   border-width: 2px 1px;
   border-style: solid;
-  @apply border-black/30 rounded-[30px] shadow-glass;
+  border-color: var(--glass-border-color);
+  @apply rounded-[30px] shadow-glass;
   backdrop-filter: blur(20px) brightness(125%) contrast(120%);
+}
+
+.dark .glass {
+  backdrop-filter: blur(20px) brightness(80%) contrast(110%);
 }
 
 .background {
@@ -70,6 +205,10 @@ body {
   background-position: center;
   background-repeat: no-repeat;
   background-attachment: fixed;
+}
+
+.dark .background {
+  background-image: linear-gradient(90deg, rgba(20, 20, 35, 0.7), rgba(30, 30, 50, 0.3)), url('/终末地视频帧_dark.png');
 }
 
 .router-link {
