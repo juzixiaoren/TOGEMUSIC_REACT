@@ -5,9 +5,23 @@ import SongPickerDialog from './SongPickerDialog';
 import PlatformPlaylistImport from './PlatformPlaylistImport';
 import Pagination from './Pagination';
 import type { Playlist, Song, SortBy, User } from './types';
-import './PlaylistManager.css';
-import './PlatformPlaylistImport.css';
-import './Pagination.css';
+const CL = {
+    page: 'grid grid-cols-[320px_1fr] gap-[18px] w-full min-h-[580px] max-[960px]:grid-cols-1',
+    panel: 'bg-white rounded-2xl flex flex-col min-h-0 p-[18px] shadow-card-lg',
+    header: 'flex justify-between items-center gap-2.5 mb-[14px]',
+    headerTitle: 'm-0 text-xl text-text-primary',
+    headerBtns: 'flex gap-2',
+    primaryBtn: 'border-none rounded-xl font-semibold cursor-pointer py-[9px] px-[14px] text-white bg-primary',
+    secondaryBtn: 'bg-white rounded-lg cursor-pointer border border-border-blue-muted py-1.5 px-2.5 text-text-blue-muted',
+    playlistList: 'list-none m-0 p-0 overflow-auto flex flex-col gap-2',
+    itemBtn: 'w-full text-left cursor-pointer border border-border-blue-source bg-surface-blue-light rounded-[10px] py-[10px] px-3 text-text-blue-placeholder',
+    itemBtnActive: 'border-primary bg-primary-light',
+    songList: 'list-none m-0 p-0 overflow-auto flex flex-col gap-2',
+    songItem: 'flex justify-between items-center gap-2.5 border border-border-blue-pale rounded-[10px] bg-surface-blue-pale py-[10px] px-3',
+    songTitle: 'font-semibold text-sm text-text-blue-deep',
+    songSub: 'text-xs text-text-blue-sub',
+    empty: 'justify-center text-[#9ca3bf]',
+};
 
 export default function PlaylistManager() {
     const setMessage = useMessage().setMessage;
@@ -129,6 +143,7 @@ export default function PlaylistManager() {
             return;
         }
         hasInitializedRef.current = true;
+        // eslint-disable-next-line react-hooks/set-state-in-effect
         void Promise.all([loadPlaylists(), loadAllSongs(), loadUsers()]);
     }, [loadAllSongs, loadPlaylists, loadUsers]);
 
@@ -289,6 +304,7 @@ export default function PlaylistManager() {
         return found?.id ?? null;
     }, [playlists]);
 
+    // eslint-disable-next-line react-hooks/preserve-manual-memoization
     const removeSong = useCallback(async (songId: number) => {
         if (!selectedPlaylistId) {
             return;
@@ -312,18 +328,18 @@ export default function PlaylistManager() {
     }, [authHeader, loadAllSongs, loadPlaylistDetail, selectedPlaylistId, setMessage]);
 
     return (
-        <div className="playlist-manager-page">
-            <div className="playlist-manager-left">
-                <div className="playlist-manager-header">
-                    <h2>我的歌单</h2>
-                    <button type="button" className="playlist-primary-btn" onClick={openCreateDialog}>创建歌单</button>
+        <div className={CL.page}>
+            <div className={CL.panel}>
+                <div className={CL.header}>
+                    <h2 className={CL.headerTitle}>我的歌单</h2>
+                    <button type="button" className={CL.primaryBtn} onClick={openCreateDialog}>创建歌单</button>
                 </div>
-                <ul className="playlist-list">
+                <ul className={CL.playlistList}>
                     {playlists.map((playlist) => (
                         <li key={playlist.id}>
                             <button
                                 type="button"
-                                className={`playlist-item-btn ${selectedPlaylistId === playlist.id ? 'active' : ''}`}
+                                className={`${CL.itemBtn} ${selectedPlaylistId === playlist.id ? CL.itemBtnActive : ''}`}
                                 onClick={() => { void loadPlaylistDetail(playlist.id); }}
                             >
                                 {playlist.playlist_name}
@@ -338,33 +354,33 @@ export default function PlaylistManager() {
                 />
             </div>
 
-            <div className="playlist-manager-right">
-                <div className="playlist-manager-header">
-                    <h2>{selectedPlaylist?.playlist_name || '请选择歌单'}</h2>
-                    <div className="header-buttons">
-                        <button type="button" className="playlist-primary-btn" onClick={() => {
+            <div className={CL.panel}>
+                <div className={CL.header}>
+                    <h2 className={CL.headerTitle}>{selectedPlaylist?.playlist_name || '请选择歌单'}</h2>
+                    <div className={CL.headerBtns}>
+                        <button type="button" className={CL.primaryBtn} onClick={() => {
                             if (!selectedPlaylistId) {
                                 setMessage('请先选择歌单', 'warning');
                                 return;
                             }
                             setShowPlatformImportDialog(true);
                         }}>导入歌单</button>
-                        <button type="button" className="playlist-primary-btn" onClick={openImportDialog}>导入歌曲</button>
+                        <button type="button" className={CL.primaryBtn} onClick={openImportDialog}>导入歌曲</button>
                     </div>
                 </div>
-                <ul className="playlist-song-list">
+                <ul className={CL.songList}>
                     {playlistSongs.map((song) => (
-                        <li key={song.id}>
+                        <li key={song.id} className={CL.songItem}>
                             <div>
-                                <div className="song-title">{song.title}</div>
-                                <div className="song-sub">{song.artist}</div>
+                                <div className={CL.songTitle}>{song.title}</div>
+                                <div className={CL.songSub}>{song.artist}</div>
                             </div>
-                            <button type="button" className="playlist-secondary-btn" onClick={() => { void removeSong(song.id); }}>
+                            <button type="button" className={CL.secondaryBtn} onClick={() => { void removeSong(song.id); }}>
                                 {selectedPlaylistId === allSongsPlaylistId ? '永久删除' : '删除'}
                             </button>
                         </li>
                     ))}
-                    {playlistSongs.length === 0 && <li className="playlist-empty">当前歌单还没有歌曲</li>}
+                    {playlistSongs.length === 0 && <li className={CL.empty}>当前歌单还没有歌曲</li>}
                 </ul>
                 {selectedPlaylistId && (
                     <Pagination

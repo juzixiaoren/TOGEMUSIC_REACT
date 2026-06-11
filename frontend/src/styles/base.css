@@ -1,53 +1,24 @@
 .content {
-
-    position: relative;
-    top: 120px;
-    /* 距离顶部的高度 */
-    margin: auto;
-    display: flex;
-    flex-direction: column;
-    align-items: center;
-    justify-content: center;
-    width: 90%;
-
+  @apply relative flex flex-col items-center justify-center w-[90%] mx-auto;
+  top: 120px;
 }
 
-
 .message-box {
-    position: fixed;
-    top: 0;
-    left: 50%;
-    transform: translateX(-50%);
-    z-index: 1000;
-    padding: 10px;
-    border-radius: 5px;
-    font-size: 14px;
-    text-align: center;
-    width: 80%;
-    max-width: 600px;
-    color: white;
+  @apply fixed top-0 left-1/2 -translate-x-1/2 z-[1000] p-2.5 rounded text-sm text-center w-4/5 max-w-[600px] text-white;
 }
 
 .message-box.success {
-    background-color: #d4edda;
-    color: #155724;
-    border: 1px solid #c3e6cb;
+  @apply bg-success-bg text-success-text border border-success-border;
 }
 
 .message-box.error {
-    background-color: #f8d7da;
-    color: #721c24;
-    border: 1px solid #f5c6cb;
+  @apply bg-error-bg text-error-text border border-error-border;
 }
 
 .message-box.warning {
-    background-color: #fff3cd;
-    color: #856404;
-    border: 1px solid #ffeeba;
+  @apply bg-warning-bg text-warning-text border border-warning-border;
 }
 
 .message-box.info {
-    background-color: #d1ecf1;
-    color: #0c5460;
-    border: 1px solid #bee5eb;
+  @apply bg-info-bg text-info-text border border-info-border;
 }

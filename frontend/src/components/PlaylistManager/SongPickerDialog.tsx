@@ -1,5 +1,33 @@
 import type { Playlist, Song, SortBy, User } from './types';
 
+const CL = {
+    overlay: 'fixed inset-0 flex items-center justify-center bg-black/32 z-[1100]',
+    dialog: 'flex flex-col gap-3 bg-white w-[min(980px,92vw)] h-[min(86vh,760px)] rounded-2xl p-[18px] shadow-dialog',
+    dialogTitle: 'm-0 text-text-primary',
+    createRow: 'flex items-center gap-2.5',
+    createLabel: 'text-[13px] text-text-blue-label',
+    createInput: 'rounded-lg border border-border-blue-input py-2 px-2.5 text-[13px]',
+    tabs: 'flex gap-2',
+    tabBtn: 'bg-white rounded-lg cursor-pointer border border-border-blue-page py-2 px-3 text-text-blue-muted',
+    tabBtnActive: 'border-transparent text-white bg-primary',
+    filterRow: 'flex gap-2 flex-wrap',
+    filterInput: 'rounded-lg border border-border-blue-input py-2 px-2.5 text-[13px] flex-1 min-w-[240px]',
+    filterSelect: 'rounded-lg border border-border-blue-input py-2 px-2.5 text-[13px]',
+    pickList: 'list-none m-0 p-0 flex-1 min-h-0 overflow-auto rounded-xl border border-border-blue-pale p-2 bg-surface-blue-pick',
+    pickItem: 'rounded-lg p-2 hover:bg-surface-blue-hover',
+    pickListNested: 'border-none bg-[#f8faff]',
+    checkbox: 'cursor-pointer w-4 h-4 accent-[#6366F1] m-2.5',
+    sourceList: 'list-none m-0 p-0 flex-1 min-h-0 overflow-auto flex flex-col gap-2',
+    sourceItem: 'overflow-hidden border border-border-blue-source rounded-[10px]',
+    sourceHeader: 'flex items-center gap-2 bg-surface-blue-soft p-2',
+    sourceSelect: 'flex items-center gap-1.5 flex-1',
+    sourceBtn: 'bg-white rounded-md cursor-pointer border border-border-blue-expand py-[5px] px-2 text-text-blue-muted',
+    footer: 'flex flex-shrink-0 justify-between items-center border-t border-border-blue-pale pt-[10px] text-text-blue-label',
+    footerBtns: 'flex gap-2',
+    primaryBtn: 'border-none rounded-xl font-semibold cursor-pointer py-[9px] px-[14px] text-white bg-primary',
+    secondaryBtn: 'bg-white rounded-lg cursor-pointer border border-border-blue-muted py-1.5 px-2.5 text-text-blue-muted',
+};
+
 type SongPickerDialogProps = {
     open: boolean;
     title: string;
@@ -108,51 +136,53 @@ export default function SongPickerDialog(props: SongPickerDialogProps) {
 
 
     return (
-        <div className="playlist-dialog-overlay" role="dialog" aria-modal="true" aria-label={title}>
-            <div className="playlist-dialog">
-                <h3>{title}</h3>
+        <div className={CL.overlay} role="dialog" aria-modal="true" aria-label={title}>
+            <div className={CL.dialog}>
+                <h3 className={CL.dialogTitle}>{title}</h3>
                 {mode === 'create' && (
-                    <div className="playlist-create-row">
-                        <label htmlFor="playlist-name">歌单名称</label>
+                    <div className={CL.createRow}>
+                        <label className={CL.createLabel} htmlFor="playlist-name">歌单名称</label>
                         <input
                             id="playlist-name"
                             value={playlistName}
                             onChange={(event) => onPlaylistNameChange(event.target.value)}
                             placeholder="请输入歌单名称"
+                            className={CL.createInput}
                         />
                     </div>
                 )}
 
-                <div className="playlist-import-tabs">
+                <div className={CL.tabs}>
                     <button
                         type="button"
-                        className={activeTab === 'songs' ? 'active' : ''}
+                        className={`${CL.tabBtn} ${activeTab === 'songs' ? CL.tabBtnActive : ''}`}
                         onClick={() => onTabChange('songs')}
                     >
                         从所有音乐选择
                     </button>
                     <button
                         type="button"
-                        className={activeTab === 'playlists' ? 'active' : ''}
+                        className={`${CL.tabBtn} ${activeTab === 'playlists' ? CL.tabBtnActive : ''}`}
                         onClick={() => onTabChange('playlists')}
                     >
                         从其他歌单选择
                     </button>
                 </div>
 
-                <div className="playlist-filter-row">
+                <div className={CL.filterRow}>
                     <input
                         value={searchQuery}
                         onChange={(event) => onSearchQueryChange(event.target.value)}
                         placeholder="搜索歌名或歌手"
+                        className={CL.filterInput}
                     />
-                    <select value={filterUser} onChange={(event) => onFilterUserChange(event.target.value)}>
+                    <select value={filterUser} onChange={(event) => onFilterUserChange(event.target.value)} className={CL.filterSelect}>
                         <option value="">所有用户</option>
                         {users.map((user) => (
                             <option key={user.id} value={user.id}>{user.username}</option>
                         ))}
                     </select>
-                    <select value={sortBy} onChange={(event) => onSortByChange(event.target.value as SortBy)}>
+                    <select value={sortBy} onChange={(event) => onSortByChange(event.target.value as SortBy)} className={CL.filterSelect}>
                         <option value="time_added">上传时间</option>
                         <option value="title">歌名</option>
                         <option value="artist">歌手</option>
@@ -161,15 +191,15 @@ export default function SongPickerDialog(props: SongPickerDialogProps) {
                 </div>
 
                 {activeTab === 'songs' && (
-                    <ul className="song-pick-list">
+                    <ul className={CL.pickList}>
                         {filteredAllSongs.map((song) => (
-                            <li key={song.id}>
+                            <li key={song.id} className={CL.pickItem}>
                                 <label>
                                     <input
                                         type="checkbox"
                                         checked={selectedSongIds.includes(song.id)}
                                         onChange={(event) => onToggleSong(song.id, event.target.checked)}
-                                        className="song-picker-check-box"
+                                        className={CL.checkbox}
                                     />
                                     <span>{song.title} - {song.artist} ({formatTime(song.duration)})</span>
                                 </label>
@@ -179,7 +209,7 @@ export default function SongPickerDialog(props: SongPickerDialogProps) {
                 )}
 
                 {activeTab === 'playlists' && (
-                    <ul className="source-playlist-list">
+                    <ul className={CL.sourceList}>
                         {sourcePlaylists.map((playlist) => {
                             const selected = selectedSourcePlaylistIds.includes(playlist.id);
                             const expanded = expandedSourcePlaylistIds.includes(playlist.id);
@@ -190,37 +220,37 @@ export default function SongPickerDialog(props: SongPickerDialogProps) {
                                 sortBy
                             );
                             return (
-                                <li key={playlist.id} className="source-playlist-item">
-                                    <div className="source-playlist-header">
-                                        <label className="source-select">
+                                <li key={playlist.id} className={CL.sourceItem}>
+                                    <div className={CL.sourceHeader}>
+                                        <label className={CL.sourceSelect}>
                                             <input
                                                 type="checkbox"
                                                 checked={selected}
                                                 onChange={(event) => onToggleSourcePlaylistSelect(playlist.id, event.target.checked)}
-                                                className="song-picker-check-box"
+                                                className={CL.checkbox}
                                             />
                                             <span>{playlist.playlist_name}</span>
                                         </label>
                                         <button
                                             type="button"
-                                            className="source-expand-btn"
+                                            className={CL.sourceBtn}
                                             onClick={() => onToggleSourcePlaylistExpand(playlist.id)}
                                         >
                                             {expanded ? '收起' : '展开'}
                                         </button>
-                                        <button type="button" onClick={() => onSelectAllFromSourcePlaylist(playlist.id)}>全选</button>
-                                        <button type="button" onClick={() => onClearSelectionFromSourcePlaylist(playlist.id)}>取消全选</button>
+                                        <button type="button" className={CL.sourceBtn} onClick={() => onSelectAllFromSourcePlaylist(playlist.id)}>全选</button>
+                                        <button type="button" className={CL.sourceBtn} onClick={() => onClearSelectionFromSourcePlaylist(playlist.id)}>取消全选</button>
                                     </div>
                                     {expanded && (
-                                        <ul className="song-pick-list nested">
+                                        <ul className={`${CL.pickList} ${CL.pickListNested}`}>
                                             {songs.map((song) => (
-                                                <li key={song.id}>
+                                                <li key={song.id} className={CL.pickItem}>
                                                     <label>
                                                         <input
                                                             type="checkbox"
                                                             checked={selectedSongIds.includes(song.id)}
                                                             onChange={(event) => onToggleSong(song.id, event.target.checked)}
-                                                            className="song-picker-check-box"
+                                                            className={CL.checkbox}
                                                         />
                                                         <span>{song.title} - {song.artist} ({formatTime(song.duration)})</span>
                                                     </label>
@@ -234,12 +264,12 @@ export default function SongPickerDialog(props: SongPickerDialogProps) {
                     </ul>
                 )}
 
-                <div className="playlist-dialog-footer">
+                <div className={CL.footer}>
                     <span>已选歌曲：{selectedSongIds.length}</span>
-                    <div>
-                        <button type="button" className="playlist-primary-btn" onClick={onSelectAll}>全选</button>
-                        <button type="button" className="playlist-primary-btn" onClick={onConfirm}>确认</button>
-                        <button type="button" className="playlist-secondary-btn" onClick={onCancel}>取消</button>
+                    <div className={CL.footerBtns}>
+                        <button type="button" className={CL.primaryBtn} onClick={onSelectAll}>全选</button>
+                        <button type="button" className={CL.primaryBtn} onClick={onConfirm}>确认</button>
+                        <button type="button" className={CL.secondaryBtn} onClick={onCancel}>取消</button>
                     </div>
                 </div>
             </div>

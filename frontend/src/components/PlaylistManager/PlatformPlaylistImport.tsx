@@ -2,6 +2,49 @@ import { useState, useEffect, useCallback, useMemo } from 'react';
 import axios from 'axios';
 import { useMessage } from '../../context/MessageContext';
 
+const CL = {
+    overlay: 'fixed inset-0 flex items-center justify-center bg-black/50 z-[1000]',
+    dialog: 'flex flex-col bg-white rounded-2xl w-[90%] max-w-[700px] max-h-[80vh] shadow-dialog-lg',
+    header: 'flex items-center justify-between py-5 px-6 border-b border-border-light',
+    headerTitle: 'm-0 font-semibold text-lg text-text-primary',
+    closeBtn: 'w-8 h-8 border-none rounded-lg cursor-pointer flex items-center justify-center bg-surface-gray text-xl text-text-secondary hover:bg-surface-gray-hover hover:text-text-primary',
+    body: 'flex-1 overflow-y-auto py-5 px-6',
+    stepContent: 'min-h-[200px]',
+    stepTitle: 'm-0 font-semibold mb-4 text-base text-text-primary',
+    stepHeader: 'flex items-center gap-3 mb-4',
+    stepHeaderTitle: 'flex-1 m-0',
+    backBtn: 'bg-white rounded-md cursor-pointer py-1.5 px-3 border border-border text-[13px] text-text-secondary hover:border-platform-qq hover:text-platform-qq',
+    selectAllBtn: 'bg-white rounded-md cursor-pointer py-1.5 px-3 border border-platform-qq text-[13px] text-platform-qq hover:bg-platform-qq hover:text-white',
+    platformList: 'flex flex-col gap-3',
+    platformItem: 'flex items-center gap-3 cursor-pointer p-4 border-2 border-border-light rounded-xl bg-white transition-all duration-200',
+    platformItemLogged: 'hover:border-platform-qq hover:bg-surface-green-light',
+    platformItemNotLogged: 'opacity-60 cursor-not-allowed',
+    platformIcon: 'text-2xl',
+    platformName: 'font-semibold text-base text-text-primary',
+    platformStatus: 'ml-auto text-[13px] text-text-tertiary',
+    hintText: 'mt-4 text-center text-[13px] text-text-tertiary',
+    playlistGrid: 'grid grid-cols-[repeat(auto-fill,minmax(150px,1fr))] gap-4',
+    playlistCard: 'bg-white cursor-pointer overflow-hidden p-0 text-left border-2 border-border-light rounded-xl transition-all duration-200 hover:border-platform-qq hover:-translate-y-0.5 hover:shadow-hover-card',
+    playlistCover: 'relative overflow-hidden aspect-square',
+    coverImg: 'w-full h-full object-cover',
+    coverPlaceholder: 'w-full h-full flex items-center justify-center bg-primary text-4xl',
+    songCount: 'absolute bottom-2 right-2 bg-black/70 text-white text-[11px] px-2 py-0.5 rounded-[10px]',
+    playlistName: 'font-medium overflow-hidden text-ellipsis whitespace-nowrap py-2.5 px-3 text-[13px] text-text-primary',
+    songList: 'flex flex-col gap-1 overflow-y-auto max-h-[400px]',
+    songItem: 'flex items-center gap-3 cursor-pointer py-2.5 px-3 rounded-lg transition-background duration-200 hover:bg-surface-gray',
+    songCheckbox: 'cursor-pointer w-[18px] h-[18px] accent-platform-qq',
+    songInfo: 'flex-1 min-w-0',
+    songTitle: 'font-medium overflow-hidden text-ellipsis whitespace-nowrap text-sm text-text-primary',
+    songArtist: 'mt-0.5 text-xs text-text-tertiary',
+    footer: 'flex items-center justify-between py-4 px-6 border-t border-border-light bg-surface-header rounded-b-2xl',
+    selectedCount: 'text-sm text-text-secondary',
+    footerBtns: 'flex gap-3',
+    cancelBtn: 'bg-white rounded-lg cursor-pointer py-2.5 px-5 border border-border text-sm text-text-secondary transition-all duration-200 hover:border-text-tertiary hover:text-text-primary',
+    importBtn: 'border-none rounded-lg font-semibold cursor-pointer py-2.5 px-6 bg-gradient-qq text-sm text-white transition-all duration-200 hover:-translate-y-px hover:shadow-active-green disabled:opacity-60 disabled:cursor-not-allowed',
+    loadingText: 'text-center py-10 text-sm text-text-tertiary',
+    emptyText: 'text-center py-10 text-sm text-text-tertiary',
+};
+
 type Platform = 'qqmusic' | 'netease';
 
 type PlatformStatus = {
@@ -44,7 +87,6 @@ interface PlatformPlaylistImportProps {
 
 export default function PlatformPlaylistImport({
     open,
-    targetPlaylistId,
     targetPlaylistName,
     onConfirm,
     onCancel,
@@ -217,37 +259,37 @@ export default function PlatformPlaylistImport({
     if (!open) return null;
 
     return (
-        <div className="platform-import-overlay">
-            <div className="platform-import-dialog">
-                <div className="platform-import-header">
-                    <h3>
+        <div className={CL.overlay}>
+            <div className={CL.dialog}>
+                <div className={CL.header}>
+                    <h3 className={CL.headerTitle}>
                         导入歌单到「{targetPlaylistName}」
                     </h3>
-                    <button className="close-btn" onClick={onCancel}>×</button>
+                    <button className={CL.closeBtn} onClick={onCancel}>×</button>
                 </div>
 
-                <div className="platform-import-body">
+                <div className={CL.body}>
                     {/* 步骤1: 选择平台 */}
                     {step === 'select-platform' && (
-                        <div className="step-content">
-                            <h4>选择音乐平台</h4>
-                            <div className="platform-list">
+                        <div className={CL.stepContent}>
+                            <h4 className={CL.stepTitle}>选择音乐平台</h4>
+                            <div className={CL.platformList}>
                                 {platforms.map((p) => (
                                     <button
                                         key={p.platform}
-                                        className={`platform-item ${p.logged_in ? 'logged-in' : 'not-logged-in'}`}
+                                        className={`${CL.platformItem} ${p.logged_in ? CL.platformItemLogged : CL.platformItemNotLogged}`}
                                         onClick={() => p.logged_in && handleSelectPlatform(p.platform)}
                                         disabled={!p.logged_in}
                                     >
-                                        <span className="platform-icon">{p.icon}</span>
-                                        <span className="platform-name">{p.name}</span>
-                                        <span className="platform-status">
+                                        <span className={CL.platformIcon}>{p.icon}</span>
+                                        <span className={CL.platformName}>{p.name}</span>
+                                        <span className={CL.platformStatus}>
                                             {p.logged_in ? `已登录 (${p.nickname})` : '未登录'}
                                         </span>
                                     </button>
                                 ))}
                             </div>
-                            <p className="hint-text">
+                            <p className={CL.hintText}>
                                 请先在「音乐平台」页面登录账号后再导入歌单
                             </p>
                         </div>
@@ -255,32 +297,32 @@ export default function PlatformPlaylistImport({
 
                     {/* 步骤2: 选择歌单 */}
                     {step === 'select-playlist' && (
-                        <div className="step-content">
-                            <div className="step-header">
-                                <button className="back-btn" onClick={handleBack}>← 返回</button>
-                                <h4>选择歌单 ({platformConfig[activePlatform].name})</h4>
+                        <div className={CL.stepContent}>
+                            <div className={CL.stepHeader}>
+                                <button className={CL.backBtn} onClick={handleBack}>← 返回</button>
+                                <h4 className={CL.stepHeaderTitle}>选择歌单 ({platformConfig[activePlatform].name})</h4>
                             </div>
                             {loading ? (
-                                <div className="loading-text">加载中...</div>
+                                <div className={CL.loadingText}>加载中...</div>
                             ) : playlists.length === 0 ? (
-                                <div className="empty-text">未找到歌单</div>
+                                <div className={CL.emptyText}>未找到歌单</div>
                             ) : (
-                                <div className="playlist-grid">
+                                <div className={CL.playlistGrid}>
                                     {playlists.map((playlist) => (
                                         <button
                                             key={playlist.id}
-                                            className="playlist-card"
+                                            className={CL.playlistCard}
                                             onClick={() => handleSelectPlaylist(playlist)}
                                         >
-                                            <div className="playlist-cover">
+                                            <div className={CL.playlistCover}>
                                                 {playlist.cover ? (
-                                                    <img src={playlist.cover} alt={playlist.name} />
+                                                    <img src={playlist.cover} alt={playlist.name} className={CL.coverImg} />
                                                 ) : (
-                                                    <div className="cover-placeholder">🎵</div>
+                                                    <div className={CL.coverPlaceholder}>🎵</div>
                                                 )}
-                                                <span className="song-count">{playlist.song_count}首</span>
+                                                <span className={CL.songCount}>{playlist.song_count}首</span>
                                             </div>
-                                            <div className="playlist-name">{playlist.name}</div>
+                                            <div className={CL.playlistName}>{playlist.name}</div>
                                         </button>
                                     ))}
                                 </div>
@@ -290,32 +332,33 @@ export default function PlatformPlaylistImport({
 
                     {/* 步骤3: 选择歌曲 */}
                     {step === 'select-songs' && (
-                        <div className="step-content">
-                            <div className="step-header">
-                                <button className="back-btn" onClick={handleBack}>← 返回</button>
-                                <h4>{selectedPlaylist?.name}</h4>
-                                <button className="select-all-btn" onClick={toggleAll}>
+                        <div className={CL.stepContent}>
+                            <div className={CL.stepHeader}>
+                                <button className={CL.backBtn} onClick={handleBack}>← 返回</button>
+                                <h4 className={CL.stepHeaderTitle}>{selectedPlaylist?.name}</h4>
+                                <button className={CL.selectAllBtn} onClick={toggleAll}>
                                     {selectedSongmids.length === songs.length ? '取消全选' : '全选'}
                                 </button>
                             </div>
                             {loadingSongs ? (
-                                <div className="loading-text">加载中...</div>
+                                <div className={CL.loadingText}>加载中...</div>
                             ) : songs.length === 0 ? (
-                                <div className="empty-text">歌单为空</div>
+                                <div className={CL.emptyText}>歌单为空</div>
                             ) : (
-                                <div className="song-list">
+                                <div className={CL.songList}>
                                     {songs.map((song) => {
                                         const songId = getSongId(song);
                                         return (
-                                            <label key={songId} className="song-item">
+                                            <label key={songId} className={CL.songItem}>
                                                 <input
                                                     type="checkbox"
                                                     checked={selectedSongmids.includes(songId)}
                                                     onChange={() => toggleSong(songId)}
+                                                    className={CL.songCheckbox}
                                                 />
-                                                <div className="song-info">
-                                                    <div className="song-title">{song.title}</div>
-                                                    <div className="song-artist">{song.artist}</div>
+                                                <div className={CL.songInfo}>
+                                                    <div className={CL.songTitle}>{song.title}</div>
+                                                    <div className={CL.songArtist}>{song.artist}</div>
                                                 </div>
                                             </label>
                                         );
@@ -326,14 +369,14 @@ export default function PlatformPlaylistImport({
                     )}
                 </div>
 
-                <div className="platform-import-footer">
-                    <span className="selected-count">
+                <div className={CL.footer}>
+                    <span className={CL.selectedCount}>
                         已选择 {selectedSongmids.length} 首歌曲
                     </span>
-                    <div className="footer-buttons">
-                        <button className="cancel-btn" onClick={onCancel}>取消</button>
+                    <div className={CL.footerBtns}>
+                        <button className={CL.cancelBtn} onClick={onCancel}>取消</button>
                         <button
-                            className="import-btn"
+                            className={CL.importBtn}
                             onClick={handleImport}
                             disabled={step !== 'select-songs' || selectedSongmids.length === 0 || importing}
                         >

@@ -2,8 +2,6 @@ import { useEffect, useState } from 'react';
 import HeaderTop from '../../components/HeaderTop/HeaderTop';
 import { useNavigate } from 'react-router-dom';
 import { useMessage } from '../../context/MessageContext';
-import '../../styles/base.css';
-import './HomePage.css';
 import FeatureSwitchBar, { type FeatureKey } from '../../components/FeatureSwitchBar/FeatureSwitchBar';
 import PlayerPage from '../../components/PlayerPage/PlayerPage';
 import UploadMusic from '../../components/UploadMusic/UploadMusic';
@@ -34,17 +32,16 @@ export default function HomePage() {
     return (
         <div>
             <HeaderTop isLogin={true} userId={userId ?? undefined} />
-            <div className='content home-content'>
-                <div className="feature-switch-wrap">
+            <div className='content justify-start'>
+                <div className="w-full mt-10">
                     <FeatureSwitchBar selectedKey={activeFeature} onChange={setActiveFeature} />
                 </div>
                 <SocketProvider>
                     <AudioProvider>
-                        <div className="home-feature-panel glass">
+                        <div className="glass w-[min(1100px,92%)] min-h-[280px] p-7 rounded-3xl text-text-dark font-mcfont [&_h2]:m-0 [&_h2]:mb-3.5">
                             {activeFeature === 'upload' && <UploadMusic />}
                             {activeFeature === 'playlist' && <PlaylistManager />}
                             {activeFeature === 'music-login' && <MusicLogin />}
-                            {/* PlayerPage 始终挂载以保持 Socket 事件监听，切歌才能同步 */}
                             <div style={{ display: activeFeature === 'player' ? 'contents' : 'none' }}>
                                 <PlayerPage />
                             </div>

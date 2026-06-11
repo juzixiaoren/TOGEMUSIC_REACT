@@ -1,54 +1,8 @@
-/* color palette from <https://github.com/vuejs/theme> */
-:root {
-  --vt-c-white: #ffffff;
-  --vt-c-white-soft: #f8f8f8;
-  --vt-c-white-mute: #f2f2f2;
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
 
-  --vt-c-black: #181818;
-  --vt-c-black-soft: #222222;
-  --vt-c-black-mute: #282828;
-
-  --vt-c-indigo: #2c3e50;
-
-  --vt-c-divider-light-1: rgba(60, 60, 60, 0.29);
-  --vt-c-divider-light-2: rgba(60, 60, 60, 0.12);
-  --vt-c-divider-dark-1: rgba(84, 84, 84, 0.65);
-  --vt-c-divider-dark-2: rgba(84, 84, 84, 0.48);
-
-  --vt-c-text-light-1: var(--vt-c-indigo);
-  --vt-c-text-light-2: rgba(60, 60, 60, 0.66);
-  --vt-c-text-dark-1: var(--vt-c-bla);
-  --vt-c-text-dark-2: rgba(235, 235, 235, 0.64);
-}
-
-/* semantic color variables for this project */
-:root {
-  --color-background: var(--vt-c-white);
-  --color-background-soft: var(--vt-c-white-soft);
-  --color-background-mute: var(--vt-c-white-mute);
-
-  --color-border: var(--vt-c-divider-light-2);
-  --color-border-hover: var(--vt-c-divider-light-1);
-
-  --color-heading: var(--vt-c-text-light-1);
-  --color-text: #000000;
-  /* 修改为黑色 */
-}
-
-@media (prefers-color-scheme: dark) {
-  :root {
-    --color-background: var(--vt-c-black);
-    --color-background-soft: var(--vt-c-black-soft);
-    --color-background-mute: var(--vt-c-black-mute);
-
-    --color-border: var(--vt-c-divider-dark-2);
-    --color-border-hover: var(--vt-c-divider-dark-1);
-
-    --color-heading: var(--vt-c-text-dark-1);
-    --color-text: var(--vt-c-text-dark-2);
-  }
-}
-
+/* ===== 全局基础样式 ===== */
 *,
 *::before,
 *::after {
@@ -58,43 +12,25 @@
 }
 
 body {
-  color: var(--color-text);
-  margin: 0;
+  @apply text-text-primary m-0;
   min-height: 100vh;
-
   background-image:
     linear-gradient(90deg, rgba(255, 255, 255, 0.55), rgba(182, 181, 181, 0)),
     url(/终末地视频帧.jpg);
-
   background-size: cover;
   background-position: center;
   background-attachment: fixed;
-  transition:
-    color 0.5s,
-    background-color 0.5s;
+  transition: color 0.5s, background-color 0.5s;
   line-height: 1.6;
-  font-family:
-    Inter,
-    -apple-system,
-    BlinkMacSystemFont,
-    'Segoe UI',
-    Roboto,
-    Oxygen,
-    Ubuntu,
-    Cantarell,
-    'Fira Sans',
-    'Droid Sans',
-    'Helvetica Neue',
-    sans-serif;
+  font-family: Inter, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, 'Fira Sans', 'Droid Sans', 'Helvetica Neue', sans-serif;
   font-size: 15px;
   text-rendering: optimizeLegibility;
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
+  overflow-x: hidden;
 }
 
-/* 其他全局样式 */
-/* 自定义字体定义，禁用就屏蔽这两条 */
-
+/* ===== 自定义字体 ===== */
 @font-face {
   font-family: 'MyFont';
   src: url('/MO-UDShinGoSCGb4-DeB_Compressed.woff2') format('woff2');
@@ -117,23 +53,16 @@ body {
   src: url('/5_Minecraft.ttf') format('truetype');
 }
 
-
-body {
-  overflow-x: hidden;
-}
-
+/* ===== 全局工具类 ===== */
 .glass {
   background-image: radial-gradient(rgb(255, 254, 254), rgb(255, 255, 255));
   border-width: 2px 1px;
   border-style: solid;
-  border-color: rgba(0, 0, 0, 0.3);
-  border-radius: 30px;
-  box-shadow: 0 4px 80px rgba(139, 139, 139, 0.2);
+  @apply border-black/30 rounded-[30px] shadow-glass;
   backdrop-filter: blur(20px) brightness(125%) contrast(120%);
 }
 
 .background {
-
   min-width: 100vw;
   min-height: 100vh;
   background-image: linear-gradient(90deg, rgba(255, 255, 255, 0.548), rgba(182, 181, 181, 0)), url('/终末地视频帧.jpg');
@@ -144,19 +73,40 @@ body {
 }
 
 .router-link {
-
-  font-family: 'MyFont';
-  color: #1890ff;
+  @apply font-myfont font-bold text-link;
   text-shadow: 0px 0px 10px rgb(202, 193, 193);
-  font-weight: bold;
 }
 
 .router-link:hover {
-
-  text-decoration: underline;
-  color: #40a9ff;
+  @apply underline text-link-hover;
 }
 
 .html {
-  overflow: hidden;
+  @apply overflow-hidden;
+}
+
+.content {
+  @apply relative flex flex-col items-center justify-center w-[90%] mx-auto;
+  top: 120px;
+}
+
+/* ===== 消息框 ===== */
+.message-box {
+  @apply fixed top-0 left-1/2 -translate-x-1/2 z-[1000] p-2.5 rounded text-sm text-center w-4/5 max-w-[600px] text-white;
+}
+
+.message-box.success {
+  @apply bg-success-bg text-success-text border border-success-border;
+}
+
+.message-box.error {
+  @apply bg-error-bg text-error-text border border-error-border;
+}
+
+.message-box.warning {
+  @apply bg-warning-bg text-warning-text border border-warning-border;
+}
+
+.message-box.info {
+  @apply bg-info-bg text-info-text border border-info-border;
 }

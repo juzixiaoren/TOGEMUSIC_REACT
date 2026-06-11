@@ -10,6 +10,7 @@ type QQSearchItem = {
     strMediaMid?: string;
 };
 
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
 function normalizeSearchItems(payload: any): QQSearchItem[] {
     const rawItems = Array.isArray(payload?.items)
         ? payload.items
@@ -25,9 +26,11 @@ function normalizeSearchItems(payload: any): QQSearchItem[] {
         })();
 
     return rawItems
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
         .map((item: any) => {
             const singers = Array.isArray(item?.singer) ? item.singer : [];
             const artist = singers
+                // eslint-disable-next-line @typescript-eslint/no-explicit-any
                 .map((s: any) => s?.name)
                 .filter(Boolean)
                 .join('/');
@@ -114,23 +117,14 @@ export default function QQMusicFun() {
                 placeholder="输入搜索关键词"
                 value={searchKey}
                 onChange={handleSearchKeyChange}
-                style={{
-                    width: '350px',
-                    height: '40px',
-                    border: '2px solid #ddd',
-                    borderRadius: '20px',
-                    padding: '0 15px',
-                    outline: 'none',
-                    margin: '0 auto',
-                    display: 'block'
-                }}
+                className="w-[350px] h-10 border-2 border-border rounded-full px-[15px] outline-none mx-auto block"
             />
             <ul>
                 {items.map((item) => (
-                    <li key={item.songmid} style={{ display: 'flex', alignItems: 'center', padding: '10px', border: '1px dotted #f0e9e9' }}>
+                    <li key={item.songmid} className="flex items-center p-2.5 border border-dotted border-[#f0e9e9]">
                         {item.title} - {item.artist}
                         <button
-                            style={{ position: 'relative', marginLeft: 'auto' }}
+                            className="relative ml-auto"
                             disabled={importingSongmid === item.songmid}
                             onClick={() => {
                                 void importSong(item);
@@ -141,17 +135,7 @@ export default function QQMusicFun() {
                     </li>
                 ))}
             </ul>
-            <button onClick={searchMusic} disabled={loading} style={{
-                height: '50px',
-                padding: '0 40px',
-                border: '1px solid #1db954',
-                backgroundColor: '#1db954',
-                color: 'white',
-                borderRadius: '0px 0px 20px 20px',
-                cursor: 'pointer',
-                display: 'block',
-                margin: '0 auto'
-            }}>
+            <button onClick={searchMusic} disabled={loading} className="h-[50px] px-10 border border-[#1db954] bg-[#1db954] text-white rounded-b-[20px] rounded-t-none cursor-pointer block mx-auto">
                 {loading ? '搜索中...' : 'QQ 音乐搜索'}
             </button>
         </div >

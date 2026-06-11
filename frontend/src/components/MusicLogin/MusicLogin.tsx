@@ -1,7 +1,6 @@
 import { useState, useEffect, useCallback } from 'react';
 import axios from 'axios';
 import { useMessage } from '../../context/MessageContext';
-import './MusicLogin.css';
 
 type Platform = 'qqmusic' | 'netease' | 'kugou';
 
@@ -265,74 +264,79 @@ export default function MusicLogin() {
         }
     };
 
+    const platformTabBase = "flex items-center gap-2 px-5 py-3 border-2 border-border-platform rounded-lg bg-white cursor-pointer relative transition-all duration-200 ease-in-out hover:border-border-platform-hover hover:-translate-y-0.5";
+    const platformTabActive = "border-border-green bg-surface-green-light shadow-green-md";
+    const loginBtnBase = "px-8 py-3.5 border-none rounded-lg text-base font-semibold cursor-pointer transition-all duration-200 ease-in-out disabled:opacity-60 disabled:cursor-not-allowed disabled:transform-none";
+    const pageBtnClass = "px-4 py-2 border border-border rounded-md bg-white text-text-primary text-sm cursor-pointer transition-all duration-200 ease-in-out hover:border-border-green hover:text-platform-qq disabled:opacity-50 disabled:cursor-not-allowed";
+
     return (
-        <div className="music-login-container">
+        <div className="p-5 max-w-[800px] mx-auto">
             {/* 平台切换 */}
-            <div className="platform-tabs">
+            <div className="flex gap-3 mb-5">
                 {(Object.entries(platformConfig) as [Platform, typeof platformConfig.qqmusic][]).map(([key, config]) => (
                     <button
                         key={key}
-                        className={`platform-tab ${activePlatform === key ? 'active' : ''}`}
+                        className={`${platformTabBase} ${activePlatform === key ? platformTabActive : ''}`}
                         onClick={() => setActivePlatform(key)}
                         style={activePlatform === key ? { borderColor: config.color } : undefined}
                     >
-                        <span className="platform-icon">{config.icon}</span>
-                        <span className="platform-name">{config.name}</span>
+                        <span className="text-xl">{config.icon}</span>
+                        <span className="text-sm font-medium">{config.name}</span>
                         {platformCookieData[key].count > 0 && (
-                            <span className="cookie-badge">{platformCookieData[key].count}</span>
+                            <span className="absolute -top-2 -right-2 bg-platform-qq text-white text-[11px] font-bold px-1.5 py-0.5 rounded-[10px] min-w-[18px] text-center">{platformCookieData[key].count}</span>
                         )}
                     </button>
                 ))}
             </div>
 
             {/* Cookie状态 */}
-            <div className="cookie-status">
-                <div className="cookie-summary">
-                    <span className="cookie-label">可用共享Cookie池:</span>
-                    <span className="cookie-count">
+            <div className="flex flex-col gap-2 px-4 py-3 bg-surface-header rounded-lg mb-5">
+                <div className="flex items-center gap-2">
+                    <span className="text-sm text-text-secondary">可用共享Cookie池:</span>
+                    <span className="text-sm font-semibold text-platform-qq">
                         {platformCookieData.qqmusic.count + platformCookieData.netease.count + platformCookieData.kugou.count} 个可用
                     </span>
                 </div>
-                <div className="cookie-details">
-                    <span className="cookie-detail-item">
-                        <span className="platform-label">QQ:</span>
-                        <span className="detail-info">普通: {platformCookieData.qqmusic.non_vip} vip: {platformCookieData.qqmusic.vip}</span>
+                <div className="flex gap-4 flex-wrap">
+                    <span className="flex items-center gap-1">
+                        <span className="text-xs font-medium text-[#555]">QQ:</span>
+                        <span className="text-xs text-text-secondary">普通: {platformCookieData.qqmusic.non_vip} vip: {platformCookieData.qqmusic.vip}</span>
                     </span>
-                    <span className="cookie-detail-item">
-                        <span className="platform-label">网易云:</span>
-                        <span className="detail-info">普通: {platformCookieData.netease.non_vip} vip: {platformCookieData.netease.vip}</span>
+                    <span className="flex items-center gap-1">
+                        <span className="text-xs font-medium text-[#555]">网易云:</span>
+                        <span className="text-xs text-text-secondary">普通: {platformCookieData.netease.non_vip} vip: {platformCookieData.netease.vip}</span>
                     </span>
-                    <span className="cookie-detail-item">
-                        <span className="platform-label">酷狗:</span>
-                        <span className="detail-info">普通: {platformCookieData.kugou.non_vip} vip: {platformCookieData.kugou.vip}</span>
+                    <span className="flex items-center gap-1">
+                        <span className="text-xs font-medium text-[#555]">酷狗:</span>
+                        <span className="text-xs text-text-secondary">普通: {platformCookieData.kugou.non_vip} vip: {platformCookieData.kugou.vip}</span>
                     </span>
                 </div>
             </div>
 
             {/* 系统登录提示 */}
             {!systemLoggedIn && (
-                <div className="system-login-hint">
-                    <p>请先<a href="/login">登录系统</a>后再使用音乐平台功能</p>
+                <div className="px-4 py-3 bg-surface-yellow-light border border-platform-vip-border rounded-lg mb-4 text-center">
+                    <p className="m-0 text-sm text-[#d46b08]">请先<a href="/login" className="text-link underline font-medium hover:text-link-hover">登录系统</a>后再使用音乐平台功能</p>
                 </div>
             )}
 
             {/* 登录区域 */}
-            <div className="login-section">
+            <div className="p-6 bg-white rounded-2xl border border-border-light mb-5">
                 {loginStatus.logged_in ? (
-                <div className="logged-in-info">
-                    <div className="user-info">
-                        <span className="user-icon">👤</span>
-                        <span className="user-name">{loginStatus.nickname || loginStatus.uin}</span>
-                        {loginStatus.is_vip && <span className="user-vip-tag">VIP</span>}
-                        <span className="user-uid">({loginStatus.uin})</span>
+                <div className="flex items-center justify-between">
+                    <div className="flex items-center gap-2">
+                        <span className="text-2xl">👤</span>
+                        <span className="text-base font-semibold">{loginStatus.nickname || loginStatus.uin}</span>
+                        {loginStatus.is_vip && <span className="text-[11px] font-bold text-white px-1.5 py-0.5 rounded tracking-wider bg-platform-vip">VIP</span>}
+                        <span className="text-sm text-text-tertiary">({loginStatus.uin})</span>
                     </div>
-                    <button className="logout-btn" onClick={handleLogout}>退出登录</button>
+                    <button className="px-4 py-2 border border-border rounded-md bg-white text-text-secondary cursor-pointer transition-all duration-200 ease-in-out hover:border-border-red hover:text-error hover:bg-surface-red-light" onClick={handleLogout}>退出登录</button>
                 </div>
                 ) : (
-                    <div className="login-actions">
+                    <div className="text-center">
                         {activePlatform === 'qqmusic' && (
                             <button
-                                className="login-btn qqmusic"
+                                className={`${loginBtnBase} bg-platform-qq text-white hover:-translate-y-0.5 hover:shadow-green-lg`}
                                 onClick={handleQQMusicLogin}
                                 disabled={loginLoading}
                             >
@@ -341,7 +345,7 @@ export default function MusicLogin() {
                         )}
                         {activePlatform === 'netease' && (
                             <button
-                                className="login-btn netease"
+                                className={`${loginBtnBase} bg-platform-netease text-white hover:-translate-y-0.5 hover:shadow-red-lg`}
                                 onClick={handleNeteaseLogin}
                                 disabled={loginLoading}
                             >
@@ -349,9 +353,9 @@ export default function MusicLogin() {
                             </button>
                         )}
                         {activePlatform === 'kugou' && (
-                            <div className="coming-soon">即将支持</div>
+                            <div className="px-6 py-3 bg-surface-gray rounded-lg text-text-quaternary text-sm">即将支持</div>
                         )}
-                        <p className="login-hint">
+                        <p className="mt-3 text-xs text-text-tertiary">
                             登录后可获取您的个人歌单，Cookie将自动加入共享池
                         </p>
                     </div>
@@ -365,23 +369,23 @@ export default function MusicLogin() {
                 const paginatedPlaylists = userPlaylists.slice(playlistPage * pageSize, (playlistPage + 1) * pageSize);
 
                 return (
-                    <div className="user-playlists">
-                        <h3 className="section-title">我的歌单</h3>
-                        <div className="playlist-grid">
+                    <div className="mb-5">
+                        <h3 className="text-base font-semibold mb-4 text-text-primary">我的歌单</h3>
+                        <div className="grid gap-4" style={{ gridTemplateColumns: 'repeat(auto-fill, minmax(180px, 1fr))' }}>
                             {paginatedPlaylists.map((playlist) => (
-                                <div key={playlist.id} className="playlist-card">
-                                    <div className="playlist-cover">
+                                <div key={playlist.id} className="bg-white rounded-2xl overflow-hidden border border-border-light transition-all duration-200 ease-in-out hover:-translate-y-1 hover:shadow-hover">
+                                    <div className="relative aspect-square overflow-hidden">
                                         {playlist.cover ? (
-                                            <img src={playlist.cover} alt={playlist.name} />
+                                            <img src={playlist.cover} alt={playlist.name} className="w-full h-full object-cover" />
                                         ) : (
-                                            <div className="playlist-cover-placeholder">🎵</div>
+                                            <div className="w-full h-full flex items-center justify-center bg-primary text-[48px]">🎵</div>
                                         )}
-                                        <span className="song-count">{playlist.song_count}首</span>
+                                        <span className="absolute bottom-2 right-2 text-white text-[11px] px-2 py-0.5 rounded-[10px] bg-black/70">{playlist.song_count}首</span>
                                     </div>
-                                    <div className="playlist-info">
-                                        <h4 className="playlist-name">{playlist.name}</h4>
+                                    <div className="p-3">
+                                        <h4 className="text-sm font-medium m-0 mb-2 overflow-hidden text-ellipsis whitespace-nowrap">{playlist.name}</h4>
                                         <button
-                                            className="import-btn"
+                                            className="w-full px-2 py-2 border border-border-green rounded-md bg-white text-platform-qq text-xs font-medium cursor-pointer transition-all duration-200 ease-in-out hover:bg-platform-qq hover:text-white disabled:opacity-60 disabled:cursor-not-allowed"
                                             onClick={() => handleImportPlaylist(playlist)}
                                             disabled={loading}
                                         >
@@ -392,17 +396,17 @@ export default function MusicLogin() {
                             ))}
                         </div>
                         {totalPages > 1 && (
-                            <div className="playlist-pagination">
+                            <div className="flex items-center justify-center gap-4 mt-4 pt-4 border-t border-border-light">
                                 <button
-                                    className="page-btn"
+                                    className={pageBtnClass}
                                     onClick={() => setPlaylistPage(p => p - 1)}
                                     disabled={playlistPage === 0}
                                 >
                                     上一页
                                 </button>
-                                <span className="page-info">{playlistPage + 1} / {totalPages}</span>
+                                <span className="text-sm text-text-secondary">{playlistPage + 1} / {totalPages}</span>
                                 <button
-                                    className="page-btn"
+                                    className={pageBtnClass}
                                     onClick={() => setPlaylistPage(p => p + 1)}
                                     disabled={playlistPage >= totalPages - 1}
                                 >
@@ -415,12 +419,12 @@ export default function MusicLogin() {
             })()}
 
             {/* 功能说明 */}
-            <div className="feature-notes">
-                <h4>功能说明</h4>
-                <ul>
-                    <li><strong>搜索音乐</strong>：无需登录，使用共享Cookie池</li>
-                    <li><strong>播放音乐</strong>：无需登录，使用共享Cookie池</li>
-                    <li><strong>导入歌单</strong>：需要登录，获取您的个人歌单</li>
+            <div className="px-5 py-4 bg-surface-header rounded-lg">
+                <h4 className="text-sm font-semibold m-0 mb-2.5 text-text-primary">功能说明</h4>
+                <ul className="m-0 pl-5">
+                    <li className="text-xs text-text-secondary mb-1.5 last:mb-0"><strong className="text-text-primary">搜索音乐</strong>：无需登录，使用共享Cookie池</li>
+                    <li className="text-xs text-text-secondary mb-1.5 last:mb-0"><strong className="text-text-primary">播放音乐</strong>：无需登录，使用共享Cookie池</li>
+                    <li className="text-xs text-text-secondary mb-1.5 last:mb-0"><strong className="text-text-primary">导入歌单</strong>：需要登录，获取您的个人歌单</li>
                 </ul>
             </div>
         </div>

@@ -8,9 +8,8 @@ import audioimg from '../../assets/images/audioimg.png';
 import DrawerSearchPanel from './DrawerSearchPanel';
 import PlayerPanel from './PlayerPanel';
 import PlaylistPanel from './PlaylistPanel';
+import OnlineUsers from '../OnlineUsers/OnlineUsers';
 import type { Playlist, Song } from './types';
-import './PlayerPage.css';
-
 const MAIN_PLAYLIST_ID = 1;
 
 export default function PlayerPage() {
@@ -28,7 +27,8 @@ export default function PlayerPage() {
     } = useAudio();
     const {
         registerEventHandlers,
-        unregisterEventHandlers
+        unregisterEventHandlers,
+        onlineUsers
     } = useSocket();
 
     const [playlists, setPlaylists] = useState<Playlist[]>([]);
@@ -158,12 +158,15 @@ export default function PlayerPage() {
 
     // 播放歌曲（带进度偏移）
     const playWithOffset = useCallback(async (song: Song, offset = 0) => {
+        // 无论播放是否成功，都先设置当前歌曲信息和封面
+        setCurrentSong(song);
+        currentSongIdRef.current = song.id;
+        setCurrentSongCoverUrl(null);
+        void fetchSongCover(song);
+
         const success = await playSong(song, offset);
-        if (success) {
-            setCurrentSong(song);
-            currentSongIdRef.current = song.id;
-            setCurrentSongCoverUrl(null);
-            void fetchSongCover(song);
+        if (!success) {
+            console.warn('播放失败（可能被浏览器自动播放限制阻止），歌曲信息和封面已更新');
         }
         return success;
     }, [fetchSongCover, playSong]);
@@ -330,6 +333,7 @@ export default function PlayerPage() {
     }, [authHeader, loadDefaultPlaylist, selectedSongs, setMessage]);
 
     // 检查播放状态并同步
+    // eslint-disable-next-line react-hooks/preserve-manual-memoization
     const checkAndSyncPlayStatus = useCallback(async () => {
         try {
             const res = await axios.get('/getplaystatus', { headers: authHeader });
@@ -346,8 +350,12 @@ export default function PlayerPage() {
                 console.log(`同步播放进度: offset=${offset}s`);
 
                 const song = status.current_song as Song;
-                await playWithOffset(song, offset);
-                setMessage('已同步播放状态', 'success');
+                const success = await playWithOffset(song, offset);
+                if (success) {
+                    setMessage('已同步播放状态', 'success');
+                } else {
+                    setMessage('已同步歌曲信息（点击页面任意位置解锁播放）', 'warning');
+                }
 
             } else {
                 console.log('服务器未在播放');
@@ -466,9 +474,13 @@ export default function PlayerPage() {
                     const startTime = new Date(data.play_start_time).getTime();
                     const offset = Math.max(0, Math.floor((serverNow - startTime) / 1000));
 
-                    setCurrentSong(data.current_song);
-                    await playWithOffset(data.current_song, offset);
-                    setMessage('已同步播放状态', 'success');
+                    // playWithOffset 内部会设置 currentSong 和获取封面
+                    const success = await playWithOffset(data.current_song, offset);
+                    if (success) {
+                        setMessage('已同步播放状态', 'success');
+                    } else {
+                        setMessage('已同步歌曲信息（点击页面任意位置解锁播放）', 'warning');
+                    }
                 }
             },
 
@@ -502,6 +514,7 @@ export default function PlayerPage() {
             return;
         }
         hasInitializedRef.current = true;
+        // eslint-disable-next-line react-hooks/set-state-in-effect
         void Promise.all([loadPlaylists(), loadDefaultPlaylist(), loadAllSongs()]).then(() => {
             // 加载完成后检查并同步播放状态
             setTimeout(() => {
@@ -524,8 +537,8 @@ export default function PlayerPage() {
 
     return (
         <>
-            <div className="player-page-wrapper">
-                <div className={`player-page ${drawerOpen ? 'drawer-open' : ''}`}>
+            <div className="relative w-full overflow-hidden min-h-[620px] rounded-3xl p-6 max-[1100px]:flex-col max-[1100px]:p-4 max-[1100px]:rounded-[20px] max-[1100px]:min-h-0">
+                <div className={`flex gap-6 w-full min-h-[572px] transition-transform duration-[350ms] ease-[cubic-bezier(0.4,0,0.2,1)] max-[1100px]:flex-col max-[1100px]:min-h-0 ${drawerOpen ? '-translate-x-[400px]' : ''}`}>
                     <PlayerPanel
                         currentSong={currentSong}
                         currentSongCoverUrl={currentSongCoverUrl}
@@ -568,7 +581,7 @@ export default function PlayerPage() {
 
                 <button
                     type="button"
-                    className="drawer-toggle"
+                    className="absolute cursor-pointer flex items-center justify-center right-6 top-1/2 -translate-y-1/2 w-[18px] h-[50px] bg-primary-light border border-primary-light-2 border-r-0 rounded-l-lg text-primary-hover text-[10px] z-10 transition-all duration-200 hover:bg-primary-light-2 hover:text-primary-muted hover:w-[22px] max-[1100px]:w-full max-[1100px]:min-h-0 max-[1100px]:h-7 max-[1100px]:rounded-b-[14px] max-[1100px]:order-[-1] max-[1100px]:right-0 max-[1100px]:top-0 max-[1100px]:translate-y-0"
                     onClick={() => setDrawerOpen(!drawerOpen)}
                     title={drawerOpen ? '关闭' : '打开导入与搜索'}
                 >
@@ -592,16 +605,9 @@ export default function PlayerPage() {
                 />
             </div>
 
-            <button onClick={syncPlaylistsAndStatus} disabled={loading} style={{
-                height: '50px',
-                border: '1px solid rgb(29 178 185)',
-                backgroundColor: 'rgb(29 185 178)',
-                color: 'white',
-                borderRadius: '29px 0px 20px 20px',
-                cursor: 'pointer',
-                display: 'block',
-                margin: '0px auto'
-            }}>
+            <OnlineUsers users={onlineUsers} />
+
+            <button onClick={syncPlaylistsAndStatus} disabled={loading} className="h-[50px] border border-[rgb(29,178,185)] bg-[rgb(29,185,178)] text-white rounded-lg cursor-pointer block mx-auto">
                 {loading ? '同步中' : '同步歌单和播放状态'}
             </button>
         </>

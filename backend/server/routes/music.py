@@ -1540,7 +1540,9 @@ def get_play_status():
                 'duration': song['duration'],
                 'file_extension': song['file_extension'],
                 'file_path': song['file_path'],
-                'uploader_id': song['uploader_id']
+                'uploader_id': song['uploader_id'],
+                'platform': song['platform'] if song['platform'] else 'local',
+                'platform_song_id': song['platform_song_id'] if song['platform_song_id'] else None
             }
     
     result = {

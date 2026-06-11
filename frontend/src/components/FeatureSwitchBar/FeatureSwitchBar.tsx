@@ -1,5 +1,4 @@
 import { useEffect } from 'react';
-import './FeatureSwitchBar.css';
 
 export type FeatureKey = 'upload' | 'playlist' | 'player' | 'music-login';
 
@@ -53,8 +52,18 @@ export default function FeatureSwitchBar({ selectedKey, onChange }: FeatureSwitc
         };
     }, [selectedKey, onChange]);
 
+    // 容器样式 - 毛玻璃效果
+    const barClass = "w-[min(780px,92%)] min-h-[68px] mx-auto p-2.5 rounded-full flex items-center justify-between gap-2 bg-black/10 border-[3px] border-white/30 backdrop-blur-xl";
+
+    // 按钮基础样式
+    const btnBaseClass = "flex-1 min-h-12 border-none rounded-full font-mcfont text-base font-bold cursor-pointer bg-transparent text-platform-green transition-all duration-200 ease-in-out";
+    // 按钮 hover 样式
+    const btnHoverClass = "hover:bg-white/25";
+    // 按钮 active 样式
+    const btnActiveClass = "bg-white/50 shadow-active-white";
+
     return (
-        <div className="feature-switch-bar" role="tablist" aria-label="功能切换">
+        <div className={barClass} role="tablist" aria-label="功能切换">
             {options.map((item) => {
                 const isActive = item.key === selectedKey;
                 return (
@@ -63,7 +72,7 @@ export default function FeatureSwitchBar({ selectedKey, onChange }: FeatureSwitc
                         type="button"
                         role="tab"
                         aria-selected={isActive}
-                        className={`feature-switch-button ${isActive ? 'active' : ''}`}
+                        className={`${btnBaseClass} ${btnHoverClass} ${isActive ? btnActiveClass : ''}`}
                         onClick={() => onChange(item.key)}
                     >
                         {item.label}

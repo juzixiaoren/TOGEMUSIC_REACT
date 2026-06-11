@@ -6,6 +6,7 @@ interface MessageContextProps {
     setMessage: ((message: string, type: MessageType) => void);
 }
 const MessageContext = createContext<MessageContextProps | undefined>(undefined);
+// eslint-disable-next-line react-refresh/only-export-components
 export const useMessage = () => {
     const context = useContext(MessageContext);
     if (!context) {

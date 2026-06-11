@@ -3,6 +3,12 @@ import type { ReactNode } from 'react';
 import { io, Socket } from 'socket.io-client';
 import type { Song } from '../components/PlayerPage/types';
 
+// 在线用户类型
+export interface OnlineUser {
+    user_id: number;
+    username: string;
+}
+
 // 定义 Socket 事件数据类型
 export interface SongChangedData {
     new_song_id: number;
@@ -36,6 +42,10 @@ export interface SyncPlaylistData {
     songs: Song[];
 }
 
+export interface OnlineUsersChangedData {
+    users: OnlineUser[];
+}
+
 // Socket 事件回调类型
 export interface SocketEventHandlers {
     onSongChanged?: (data: SongChangedData) => void;
@@ -44,10 +54,12 @@ export interface SocketEventHandlers {
     onPlaylistUpdated?: (data: PlaylistUpdatedData) => void;
     onSyncPlayStatus?: (data: SyncPlayStatusData) => void;
     onSyncPlaylist?: (data: SyncPlaylistData) => void;
+    onOnlineUsersChanged?: (data: OnlineUsersChangedData) => void;
 }
 
 export interface SocketContextType {
     isConnected: boolean;
+    onlineUsers: OnlineUser[];
     emitRequestNextSong: (callback?: (response: { success: boolean }) => void) => void;
     emitRequestPrevSong: (callback?: (response: { success: boolean }) => void) => void;
     emitRequestShuffle: (callback?: (response: { success: boolean }) => void) => void;
@@ -57,6 +69,7 @@ export interface SocketContextType {
 
 const SocketContext = createContext<SocketContextType | undefined>(undefined);
 
+// eslint-disable-next-line react-refresh/only-export-components
 export const useSocket = () => {
     const context = useContext(SocketContext);
     if (!context) {
@@ -67,6 +80,7 @@ export const useSocket = () => {
 
 export const SocketProvider = ({ children }: { children: ReactNode }) => {
     const [isConnected, setIsConnected] = useState(false);
+    const [onlineUsers, setOnlineUsers] = useState<OnlineUser[]>([]);
     const socketRef = useRef<Socket | null>(null);
     const handlersRef = useRef<SocketEventHandlers>({});
 
@@ -78,6 +92,9 @@ export const SocketProvider = ({ children }: { children: ReactNode }) => {
                 : '/'
         );
 
+        // 获取token用于身份识别
+        const token = localStorage.getItem('token') || '';
+
         // 建立 Socket 连接
         const socket = io(socketBaseUrl, {
             path: '/socket.io',
@@ -87,7 +104,8 @@ export const SocketProvider = ({ children }: { children: ReactNode }) => {
             reconnectionAttempts: Infinity,
             reconnectionDelay: 1000,
             reconnectionDelayMax: 5000,
-            timeout: 10000
+            timeout: 10000,
+            auth: { token }
         });
 
         socketRef.current = socket;
@@ -158,6 +176,12 @@ export const SocketProvider = ({ children }: { children: ReactNode }) => {
             handlersRef.current.onSyncPlaylist?.(data);
         });
 
+        socket.on('online_users_changed', (data: OnlineUsersChangedData) => {
+            console.log('收到在线用户更新:', data);
+            setOnlineUsers(data.users || []);
+            handlersRef.current.onOnlineUsersChanged?.(data);
+        });
+
         return () => {
             socket.disconnect();
             socketRef.current = null;
@@ -188,6 +212,7 @@ export const SocketProvider = ({ children }: { children: ReactNode }) => {
     return (
         <SocketContext.Provider value={{
             isConnected,
+            onlineUsers,
             emitRequestNextSong,
             emitRequestPrevSong,
             emitRequestShuffle,

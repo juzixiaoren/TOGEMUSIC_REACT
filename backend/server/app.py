@@ -18,6 +18,9 @@ from server.config import Config
 from routes.auth import auth_bp
 from routes.music import music_bp
 from routes.cookie import cookie_bp, register_cookie_tasks
+from dao.user import User
+
+user_model = User()
 
 scheduler = None
 socketio_async_mode = os.getenv("SOCKETIO_ASYNC_MODE", "threading")
@@ -48,8 +51,44 @@ from utils.song_scheduler import song_scheduler
 song_model = Song()
 playlist_model = Playlist()
 
+# 在线用户跟踪：sid -> {'user_id': int, 'username': str}
+online_users = {}
+
 def now_ms():
     return int(time.time() * 1000)
+
+def broadcast_online_users():
+    """广播在线用户列表给所有客户端"""
+    users_list = [
+        {'user_id': info['user_id'], 'username': info['username']}
+        for info in online_users.values()
+    ]
+    socketio.emit('online_users_changed', {'users': users_list}, room=None)
+    print(f"📢 广播在线用户：{len(users_list)} 人")
+
+def stop_playback_if_no_users():
+    """当在线用户为0时，自动停止播放"""
+    if len(online_users) == 0:
+        try:
+            status = song_model.get_play_status()
+            if status and status["is_playing"]:
+                # 停止播放
+                with song_model.get_conn():
+                    song_model.get_conn().execute(
+                        "UPDATE room_play_state SET is_playing = 0, need_notify = 1 WHERE room_id = 1"
+                    )
+                    song_model.get_conn().commit()
+                
+                # 广播播放状态变更
+                socketio.emit('sync_play_status', {
+                    'play_start_time': None,
+                    'is_playing': False,
+                    'current_song': None,
+                    'server_now': now_ms()
+                }, room=None)
+                print("⏹️ 在线用户为0，已自动停止播放")
+        except Exception as e:
+            print(f"❌ 停止播放失败: {e}")
 
 def broadcast_song_changed():
     """
@@ -168,10 +207,24 @@ def create_app():
 
     # ===== WebSocket 事件处理 =====
     @socketio.on('connect')
-    def handle_connect():
+    def handle_connect(auth=None):
         """客户端连接时，发送当前状态（初始化同步）"""
-        print(f"✅ Client connected: {request.sid}")
+        print(f"✅ Client connected: {request.sid}, auth: {auth}")
         try:
+            # 从auth参数获取token（客户端通过 auth: { token } 发送）
+            token = (auth or {}).get('token', '')
+            if token:
+                user_id = user_model.query_token(token)
+                if user_id:
+                    username = user_model.find_user_by_id(user_id)
+                    if username:
+                        online_users[request.sid] = {
+                            'user_id': user_id,
+                            'username': username
+                        }
+                        broadcast_online_users()
+                        print(f"✅ 用户 {username} (ID: {user_id}) 已上线")
+            
             # 发送当前播放状态
             status = song_model.get_play_status()
             if status:
@@ -198,6 +251,13 @@ def create_app():
                 'songs': [dict(s) for s in songs]
             }, room=request.sid)
             
+            # 发送当前在线用户列表
+            users_list = [
+                {'user_id': info['user_id'], 'username': info['username']}
+                for info in online_users.values()
+            ]
+            socketio.emit('online_users_changed', {'users': users_list}, room=request.sid)
+            
             print(f"✅ Sent initial state to {request.sid}")
         except Exception as e:
             print(f"❌ Failed to send initial state: {e}")
@@ -205,6 +265,14 @@ def create_app():
     @socketio.on('disconnect')
     def handle_disconnect():
         print(f"❌ Client disconnected: {request.sid}")
+        # 从在线用户列表移除
+        if request.sid in online_users:
+            username = online_users[request.sid]['username']
+            del online_users[request.sid]
+            print(f"❌ 用户 {username} 已下线")
+            broadcast_online_users()
+            # 检查是否需要停止播放
+            stop_playback_if_no_users()
 
     @socketio.on('song_ended')
     def handle_song_ended(data=None):

@@ -1,5 +1,3 @@
-import './Pagination.css';
-
 interface PaginationProps {
     currentPage: number;
     totalPages: number;
@@ -46,32 +44,36 @@ export default function Pagination({ currentPage, totalPages, onPageChange }: Pa
         return pages;
     };
 
+    const btnClass = "border border-border-blue-page bg-white rounded-lg px-3 py-1.5 cursor-pointer text-text-blue-muted text-xs transition-all duration-200 hover:border-primary hover:text-primary disabled:opacity-50 disabled:cursor-not-allowed";
+    const pageBaseClass = "w-8 h-8 border border-border-blue-page bg-white rounded-lg cursor-pointer text-text-blue-muted text-xs flex items-center justify-center transition-all duration-200 hover:border-primary hover:text-primary";
+    const pageActiveClass = "border-transparent text-white bg-primary";
+
     return (
-        <div className="pagination">
+        <div className="flex items-center justify-center gap-2 py-3 flex-shrink-0">
             <button
-                className="pagination-btn"
+                className={btnClass}
                 onClick={() => onPageChange(currentPage - 1)}
                 disabled={currentPage <= 1}
             >
                 上一页
             </button>
-            <div className="pagination-pages">
+            <div className="flex items-center gap-1">
                 {getPageNumbers().map((page, index) => (
                     typeof page === 'number' ? (
                         <button
                             key={index}
-                            className={`pagination-page ${currentPage === page ? 'active' : ''}`}
+                            className={`${pageBaseClass} ${currentPage === page ? pageActiveClass : ''}`}
                             onClick={() => onPageChange(page)}
                         >
                             {page}
                         </button>
                     ) : (
-                        <span key={index} className="pagination-ellipsis">...</span>
+                        <span key={index} className="w-8 text-center text-text-blue-sub">...</span>
                     )
                 ))}
             </div>
             <button
-                className="pagination-btn"
+                className={btnClass}
                 onClick={() => onPageChange(currentPage + 1)}
                 disabled={currentPage >= totalPages}
             >

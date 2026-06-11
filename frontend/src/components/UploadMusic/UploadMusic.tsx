@@ -5,7 +5,6 @@ import { useMessage } from '../../context/MessageContext';
 import UploadDropzone from './UploadDropzone';
 import UploadFileTable from './UploadFileTable';
 import type { UploadFileItem } from './types';
-import './UploadMusic.css';
 
 const CHUNK_SIZE = 5 * 1024 * 1024;
 const MAX_CONCURRENT_CHUNKS = 3;
@@ -36,7 +35,7 @@ export default function UploadMusic() {
             const response = await axios.get('/getAllPlaylists', { headers: authHeader });
             const data = response.data;
             const list = Array.isArray(data) ? data : (data.items || []);
-            setPlaylists(list.map((p: any) => ({ id: p.id, name: p.playlist_name })));
+            setPlaylists(list.map((p: Record<string, unknown>) => ({ id: p.id as number, name: p.playlist_name as string })));
         } catch {
             // 静默失败
         }
@@ -114,7 +113,7 @@ export default function UploadMusic() {
             if (!picture) {
                 return null;
             }
-            const blob = new Blob([picture.data], { type: picture.format });
+            const blob = new Blob([picture.data as BlobPart], { type: picture.format });
             return new Promise((resolve) => {
                 const reader = new FileReader();
                 reader.onloadend = () => resolve(reader.result as string);
@@ -308,7 +307,7 @@ export default function UploadMusic() {
 
             // 4. 通知后端上传完成，写入数据库
             const fileExtension = file.name.split('.').pop()?.toLowerCase() || '';
-            const payload: Record<string, any> = {
+            const payload: Record<string, unknown> = {
                 cosKey,
                 title: currentFile.title,
                 artist: currentFile.artist,
@@ -389,7 +388,7 @@ export default function UploadMusic() {
 
             await Promise.all(Array.from({ length: workerCount }, () => worker()));
 
-            const mergePayload: Record<string, any> = { sessionId };
+            const mergePayload: Record<string, unknown> = { sessionId };
             if (selectedPlaylistId !== '') {
                 mergePayload.playlistId = selectedPlaylistId;
             }
@@ -468,13 +467,14 @@ export default function UploadMusic() {
     }, [files, setMessage, uploadSingleFile, uploadSingleFileCos, checkCosEnabled]);
 
     return (
-        <div className="upload-music-page">
-            <h2>上传音乐</h2>
+        <div className="w-full flex flex-col gap-4">
+            <h2 className="m-0 text-2xl text-text-primary">上传音乐</h2>
 
             {/* 歌单选择区域 */}
-            <div className="upload-playlist-selector">
-                <label>目标歌单：</label>
+            <div className="flex items-center gap-2.5 bg-surface rounded-2xl px-[18px] py-3.5 shadow-card flex-wrap">
+                <label className="font-semibold text-text-primary whitespace-nowrap">目标歌单：</label>
                 <select
+                    className="border border-border-blue-soft rounded-lg px-2 py-2 text-xs outline-none bg-surface min-w-[160px]"
                     value={selectedPlaylistId}
                     onChange={(e) => {
                         const val = e.target.value;
@@ -486,8 +486,9 @@ export default function UploadMusic() {
                         <option key={p.id} value={p.id}>{p.name}</option>
                     ))}
                 </select>
-                <span className="playlist-or-text">或</span>
+                <span className="text-text-tertiary text-xs">或</span>
                 <input
+                    className="border border-border-blue-soft rounded-lg px-2 py-2 text-xs outline-none w-[160px]"
                     type="text"
                     placeholder="新建歌单名称"
                     value={newPlaylistName}
@@ -500,7 +501,7 @@ export default function UploadMusic() {
                 />
                 <button
                     type="button"
-                    className="upload-secondary-btn"
+                    className="border border-border-blue-muted bg-surface rounded-lg px-2.5 py-1.5 text-text-blue-muted cursor-pointer disabled:opacity-60 disabled:cursor-not-allowed"
                     disabled={creatingPlaylist}
                     onClick={() => void createPlaylist()}
                 >

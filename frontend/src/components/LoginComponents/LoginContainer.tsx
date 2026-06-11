@@ -4,7 +4,7 @@ import type { e, ek } from "../../types/alltypes";
 import { UserNameInput, UserPasswordInput } from "./UserInput";
 import { useNavigate } from "react-router-dom";
 import { useMessage } from "../../context/MessageContext";
-import "./LoginContainer.css";
+
 export default function LoginContainer({ toggleView }: { toggleView: () => void }) {
     const [userId, setUserId] = useState("");
     const [password, setPassword] = useState("");
@@ -67,9 +67,10 @@ export default function LoginContainer({ toggleView }: { toggleView: () => void 
             else {
                 setMessage(response.data.message || "登录失败，请检查用户名和密码", "error");
             }
-        } catch (error: any) {
-            if (error.response) {
-                setMessage(error.response.data.message || "登录失败，请检查用户名和密码", "error");
+        } catch (error: unknown) {
+            const err = error as { response?: { data?: { message?: string } } };
+            if (err.response) {
+                setMessage(err.response.data?.message || "登录失败，请检查用户名和密码", "error");
             }
             else {
                 setMessage("登录失败，请检查网络连接", "error");
@@ -80,7 +81,9 @@ export default function LoginContainer({ toggleView }: { toggleView: () => void 
         if (e.key === "Enter") {
             e.preventDefault();
             if (field === "userId") {
-                validateUserName() && passwordInputRef.current?.focus();
+                if (validateUserName()) {
+                    passwordInputRef.current?.focus();
+                }
             }
             else if (field === "password") {
                 submitLogin();
@@ -96,33 +99,37 @@ export default function LoginContainer({ toggleView }: { toggleView: () => void 
     const handlePasswordChange = (e: e) => {
         setPassword(e.target.value);
     }
+    const errorClass = "mt-1.5 ml-1.5 text-error text-xs leading-[1.3] min-h-4";
+    const loginBtnClass = "box-border w-[150px] h-[45px] text-base font-bold text-white rounded-lg border-y-2 border-solid bg-error-btn-bg border-error-btn-border hover:shadow-focus-red transition-[0.5s]";
+    const registerBtnClass = "box-border w-[150px] h-[45px] text-base font-bold text-white rounded-lg border-y-2 border-solid bg-register-bg border-register-border hover:shadow-focus-blue transition-[0.5s]";
+
     return (
-        <div className="loginContainer">
-            <h2>登录</h2>
-            <div className="inputContainer">
-                <div className="fieldBlock">
+        <div className="flex flex-col justify-center">
+            <h2 className="ml-[60px] mb-5 text-3xl font-bold">登录</h2>
+            <div className="w-full">
+                <div className="w-[60%] ml-[60px] mb-3.5">
                     <UserNameInput
                         ref={idInputRef}
                         name={userId}
                         handleChange={handleNameChange}
                         handleKeyDown={(event) => handleEnterKey(event, "userId")}
                     />
-                    {userNameError && <div className="errorMessage">{userNameError}</div>}
+                    {userNameError && <div className={errorClass}>{userNameError}</div>}
                 </div>
 
-                <div className="fieldBlock">
+                <div className="w-[60%] ml-[60px] mb-3.5">
                     <UserPasswordInput
                         ref={passwordInputRef}
                         password={password}
                         handleChange={handlePasswordChange}
                         handleKeyDown={(event) => handleEnterKey(event, "password")}
                     />
-                    {passwordError && <div className="errorMessage">{passwordError}</div>}
+                    {passwordError && <div className={errorClass}>{passwordError}</div>}
                 </div>
 
-                <div className="buttonRow">
-                    <button className="loginButton" onClick={submitLogin}>登录</button>
-                    <button className="registerButton" onClick={toggleView}>注册</button>
+                <div className="flex gap-3 ml-[60px] mt-2">
+                    <button className={loginBtnClass} onClick={submitLogin}>登录</button>
+                    <button className={registerBtnClass} onClick={toggleView}>注册</button>
                 </div>
             </div>
         </div>
