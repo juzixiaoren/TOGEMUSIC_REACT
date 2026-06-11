@@ -1,16 +1,14 @@
 services:
   frontend:
-    build:
-      context: ./frontend
-    image: juzixiaoren/togemusic-react:frontend-v5 # 您的前端镜像名
+    image: juzixiaoren/togemusic-react:frontend-v5
     ports:
       - "14514:14514"
     depends_on:
       - backend
+    restart: unless-stopped
 
   backend:
-    build: ./backend
-    image: juzixiaoren/togemusic-react:backend-v5 # 您的后端镜像名
+    image: juzixiaoren/togemusic-react:backend-v5
     ports:
       - "8034:8034"
     depends_on:
@@ -34,6 +32,7 @@ services:
       - COS_BUCKET=${COS_BUCKET:-}
       - COS_REGION=${COS_REGION:-ap-guangzhou}
       - COS_PRESIGN_EXPIRE=${COS_PRESIGN_EXPIRE:-3600}
+    restart: unless-stopped
 
   redis:
     image: redis:7-alpine
