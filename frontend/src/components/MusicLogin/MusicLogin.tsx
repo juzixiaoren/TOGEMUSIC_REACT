@@ -348,10 +348,23 @@ export default function MusicLogin() {
             );
 
             const songs = songsResp.data.songs || [];
+            const apiCount = songsResp.data.count || songs.length;
+            const trackCount = songsResp.data.track_count || apiCount;
+            const failedBatches = songsResp.data.failed_batches || 0;
+
             if (songs.length === 0) {
                 setMessage('歌单中没有歌曲', 'warning');
                 return;
             }
+
+            let fetchMsg = `获取到 ${apiCount}/${trackCount} 首歌曲`;
+            if (failedBatches > 0) {
+                fetchMsg += `，${failedBatches} 个批次获取失败`;
+            }
+            if (apiCount < trackCount) {
+                fetchMsg += `（部分歌曲获取失败）`;
+            }
+            setMessage(fetchMsg, apiCount < trackCount ? 'warning' : 'info');
 
             setMessage(`正在导入 ${songs.length} 首歌曲...`, 'info');
 
@@ -369,9 +382,13 @@ export default function MusicLogin() {
             );
 
             const result = importResp.data;
+            let importMsg = `导入完成: 成功 ${result.imported} 首, 失败 ${result.failed} 首`;
+            if (trackCount > 0 && result.imported < trackCount) {
+                importMsg += `（歌单共 ${trackCount} 首）`;
+            }
             setMessage(
-                `导入完成: 成功 ${result.imported} 首, 失败 ${result.failed} 首`,
-                result.failed > 0 ? 'warning' : 'success'
+                importMsg,
+                result.failed > 0 || result.imported < trackCount ? 'warning' : 'success'
             );
         } catch (error: unknown) {
             const err = error as { response?: { data?: { message?: string } } };

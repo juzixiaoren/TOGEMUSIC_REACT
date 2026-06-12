@@ -1134,23 +1134,34 @@ def netease_playlist_songs():
         tracks = playlist_detail.get('tracks', [])
         track_count = playlist_detail.get('trackCount', len(tracks))
         
+        print(f"[网易云歌单获取] playlist_id={playlist_id}, trackCount={track_count}, 初始tracks数={len(tracks)}")
+        
+        failed_batches = 0
         # 如果返回的tracks数量小于trackCount，使用trackIds获取所有歌曲
         if len(tracks) < track_count:
             track_ids = playlist_detail.get('trackIds', [])
+            print(f"[网易云歌单获取] trackIds总数={len(track_ids)}")
             if track_ids:
-                # 分批获取歌曲详情（每批最多1000首）
                 all_tracks = []
-                batch_size = 1000
+                batch_size = 200
+                total_batches = (len(track_ids) + batch_size - 1) // batch_size
                 for i in range(0, len(track_ids), batch_size):
                     batch_ids = [item.get('id') for item in track_ids[i:i+batch_size] if item.get('id')]
+                    batch_num = i // batch_size + 1
                     if batch_ids:
                         try:
                             batch_tracks = netease.get_song_detail(batch_ids)
                             if batch_tracks:
                                 all_tracks.extend(batch_tracks)
+                                print(f"[网易云歌单获取] 第{batch_num}/{total_batches}批: 请求{len(batch_ids)}首, 返回{len(batch_tracks)}首")
+                            else:
+                                failed_batches += 1
+                                print(f"[网易云歌单获取] 第{batch_num}/{total_batches}批: 请求{len(batch_ids)}首, 返回空")
                         except Exception as e:
-                            print(f"⚠️ 获取歌曲详情批次失败: {e}")
+                            failed_batches += 1
+                            print(f"[网易云歌单获取] 第{batch_num}/{total_batches}批失败: {e}")
                 tracks = all_tracks
+                print(f"[网易云歌单获取] 分批获取完成: 共{total_batches}批, 失败{failed_batches}批, 获取到{len(tracks)}首")
         
         formatted_songs = []
         for track in tracks:
@@ -1164,12 +1175,15 @@ def netease_playlist_songs():
                 'cover': (track.get('al') or {}).get('picUrl', ''),
             })
 
+        print(f"[网易云歌单获取] 最终结果: 共{track_count}首, 获取成功{len(formatted_songs)}首, 失败批次{failed_batches}")
+
         return jsonify({
             'songs': formatted_songs,
             'playlist_name': playlist_detail.get('name', ''),
             'count': len(formatted_songs),
             'cover_url': playlist_detail.get('coverImgUrl', ''),
-            'track_count': track_count
+            'track_count': track_count,
+            'failed_batches': failed_batches
         }), 200
     except Exception as e:
         return jsonify({'message': f'获取歌单歌曲失败: {str(e)}'}), 500
@@ -1282,9 +1296,9 @@ def qqmusic_import_playlist():
                         )
                     imported_count += 1
                 else:
-                    # 插入新歌曲
+                    # 插入新歌曲（OR IGNORE 避免 UNIQUE 约束导致整个批次回滚）
                     batch_ops.append(
-                        ('INSERT INTO songs (title, artist, duration, file_path, uploader_id, file_extension, platform, platform_song_id) VALUES (?, ?, ?, ?, ?, ?, ?, ?)',
+                        ('INSERT OR IGNORE INTO songs (title, artist, duration, file_path, uploader_id, file_extension, platform, platform_song_id) VALUES (?, ?, ?, ?, ?, ?, ?, ?)',
                          (title, artist, duration, '', user_id, 'm4a', 'qqmusic', songmid))
                     )
                     # 添加到歌单（使用子查询获取刚插入的song_id）
@@ -1430,9 +1444,9 @@ def netease_import_playlist():
                         )
                     imported_count += 1
                 else:
-                    # 插入新歌曲
+                    # 插入新歌曲（OR IGNORE 避免 UNIQUE 约束导致整个批次回滚）
                     batch_ops.append(
-                        ('INSERT INTO songs (title, artist, duration, file_path, uploader_id, file_extension, platform, platform_song_id) VALUES (?, ?, ?, ?, ?, ?, ?, ?)',
+                        ('INSERT OR IGNORE INTO songs (title, artist, duration, file_path, uploader_id, file_extension, platform, platform_song_id) VALUES (?, ?, ?, ?, ?, ?, ?, ?)',
                          (title, artist, duration, None, user_id, 'mp3', 'netease', str(netease_song_id)))
                     )
                     # 添加到歌单（使用子查询获取刚插入的song_id）
