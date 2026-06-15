@@ -14,6 +14,8 @@ type PlayerPanelProps = {
     onOpenImportDialog: () => void;
     onVolumeChange: (volume: number) => void;
     onCoverLoadFailed: () => void;
+    loopMode: boolean;
+    onToggleLoop: () => void;
 };
 
 const TOGGLE_BTN = 'bg-surface-elevated cursor-pointer py-2.5 px-3.5 border border-border rounded-lg text-[13px] text-text-secondary font-medium -translate-y-1.5 hover:bg-surface-elevated-hover';
@@ -31,7 +33,9 @@ export default function PlayerPanel({
     onShuffle,
     onOpenImportDialog,
     onVolumeChange,
-    onCoverLoadFailed
+    onCoverLoadFailed,
+    loopMode,
+    onToggleLoop
 }: PlayerPanelProps) {
     return (
         <>
@@ -120,6 +124,32 @@ export default function PlayerPanel({
                     </button>
                     <button type="button" onClick={onOpenImportDialog} className={TOGGLE_BTN}>
                         📂 导入歌曲
+                    </button>
+                    <button
+                        type="button"
+                        onClick={onToggleLoop}
+                        className={`${TOGGLE_BTN} relative overflow-hidden h-[38px] flex items-center justify-center`}
+                    >
+                        {/* 背景文字层 */}
+                        <span className="relative z-10 text-[13px] font-medium text-text-secondary select-none">
+                            🔁 循环播放
+                        </span>
+                        {/* 滑块轨道 */}
+                        <div className="absolute inset-0 flex items-center">
+                            <div
+                                className={`absolute h-[32px] w-[48%] rounded-lg transition-all duration-300 ease-in-out ${
+                                    loopMode
+                                        ? 'right-0.5 bg-primary/80'
+                                        : 'left-0.5'
+                                }`}
+                                style={!loopMode ? { backgroundColor: 'rgba(255, 122, 89, 0.9)' } : undefined}
+                            >
+                                {/* 滑块上的文字 */}
+                                <span className="absolute inset-0 flex items-center justify-center text-[11px] font-bold text-white select-none">
+                                    {loopMode ? 'ON' : 'OFF'}
+                                </span>
+                            </div>
+                        </div>
                     </button>
                 </div>
             </div>

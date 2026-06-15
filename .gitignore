@@ -45,3 +45,5 @@ __pycache__/
 #.env
 *.env
 backend/.env
+backend/dao/db/musicdata.db-shm
+*.db-wal

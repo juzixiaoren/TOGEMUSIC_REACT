@@ -36,6 +36,11 @@ export interface SyncPlayStatusData {
     current_song: Song | null;
     play_start_time: string;
     server_now: number;
+    loop_mode?: boolean;
+}
+
+export interface LoopModeChangedData {
+    enabled: boolean;
 }
 
 export interface SyncPlaylistData {
@@ -55,6 +60,7 @@ export interface SocketEventHandlers {
     onSyncPlayStatus?: (data: SyncPlayStatusData) => void;
     onSyncPlaylist?: (data: SyncPlaylistData) => void;
     onOnlineUsersChanged?: (data: OnlineUsersChangedData) => void;
+    onLoopModeChanged?: (data: LoopModeChangedData) => void;
 }
 
 export interface SocketContextType {
@@ -64,6 +70,7 @@ export interface SocketContextType {
     emitRequestNextSong: (callback?: (response: { success: boolean }) => void) => void;
     emitRequestPrevSong: (callback?: (response: { success: boolean }) => void) => void;
     emitRequestShuffle: (callback?: (response: { success: boolean }) => void) => void;
+    emitToggleLoopMode: (enabled: boolean, callback?: (response: { success: boolean }) => void) => void;
     registerEventHandlers: (handlers: SocketEventHandlers) => void;
     unregisterEventHandlers: () => void;
 }
@@ -185,6 +192,11 @@ export const SocketProvider = ({ children }: { children: ReactNode }) => {
             handlersRef.current.onOnlineUsersChanged?.(data);
         });
 
+        socket.on('loop_mode_changed', (data: LoopModeChangedData) => {
+            console.log('收到循环模式变化:', data);
+            handlersRef.current.onLoopModeChanged?.(data);
+        });
+
         return () => {
             socket.disconnect();
             socketRef.current = null;
@@ -205,6 +217,10 @@ export const SocketProvider = ({ children }: { children: ReactNode }) => {
         socketRef.current?.emit('request_shuffle_playlist', {}, callback);
     };
 
+    const emitToggleLoopMode = (enabled: boolean, callback?: (response: { success: boolean }) => void) => {
+        socketRef.current?.emit('toggle_loop_mode', { enabled }, callback);
+    };
+
     const registerEventHandlers = (handlers: SocketEventHandlers) => {
         handlersRef.current = handlers;
     };
@@ -221,6 +237,7 @@ export const SocketProvider = ({ children }: { children: ReactNode }) => {
             emitRequestNextSong,
             emitRequestPrevSong,
             emitRequestShuffle,
+            emitToggleLoopMode,
             registerEventHandlers,
             unregisterEventHandlers
         }}>

@@ -1,4 +1,5 @@
 import type { Playlist, Song, SortBy, User } from './types';
+import Pagination from './Pagination';
 
 const CL = {
     overlay: 'fixed inset-0 flex items-center justify-center bg-black/32 z-[1100]',
@@ -56,6 +57,17 @@ type SongPickerDialogProps = {
     onClearSelectionFromSourcePlaylist: (playlistId: number) => void;
     onConfirm: () => void;
     onCancel: () => void;
+    // 分页相关
+    songsCurrentPage: number;
+    songsTotalPages: number;
+    onSongsPageChange: (page: number) => void;
+    // 歌单分页相关
+    sourcePlaylistPagination: Record<number, { currentPage: number, totalPages: number }>;
+    onSourcePlaylistPageChange: (playlistId: number, page: number) => void;
+    pageSize: number;
+    // 全选当前页相关
+    onSelectAllCurrentPage: () => void;
+    onSelectAllCurrentPageFromSourcePlaylist: (playlistId: number) => void;
 };
 
 function formatTime(duration: number) {
@@ -68,7 +80,7 @@ function formatTime(duration: number) {
     return `${mins}:${secs.toString().padStart(2, '0')}`;
 }
 
-function filterAndSortSongs(songs: Song[], searchQuery: string, filterUser: string, sortBy: SortBy) {// 过滤
+export function filterAndSortSongs(songs: Song[], searchQuery: string, filterUser: string, sortBy: SortBy) {// 过滤
     const q = searchQuery.trim().toLowerCase();
     const filtered = songs.filter((song) => {
         const matchSearch =
@@ -119,7 +131,15 @@ export default function SongPickerDialog(props: SongPickerDialogProps) {
         onSelectAllFromSourcePlaylist,
         onClearSelectionFromSourcePlaylist,
         onConfirm,
-        onCancel
+        onCancel,
+        songsCurrentPage,
+        songsTotalPages,
+        onSongsPageChange,
+        sourcePlaylistPagination,
+        onSourcePlaylistPageChange,
+        pageSize,
+        onSelectAllCurrentPage,
+        onSelectAllCurrentPageFromSourcePlaylist
     } = props;
 
     if (!open) {
@@ -191,21 +211,38 @@ export default function SongPickerDialog(props: SongPickerDialogProps) {
                 </div>
 
                 {activeTab === 'songs' && (
-                    <ul className={CL.pickList}>
-                        {filteredAllSongs.map((song) => (
-                            <li key={song.id} className={CL.pickItem}>
-                                <label>
-                                    <input
-                                        type="checkbox"
-                                        checked={selectedSongIds.includes(song.id)}
-                                        onChange={(event) => onToggleSong(song.id, event.target.checked)}
-                                        className={CL.checkbox}
-                                    />
-                                    <span>{song.title} - {song.artist} ({formatTime(song.duration)})</span>
-                                </label>
-                            </li>
-                        ))}
-                    </ul>
+                    <div className="flex flex-col flex-1 min-h-0">
+                        <div className="flex gap-2 mb-2">
+                            <button type="button" className={CL.secondaryBtn} onClick={onSelectAllCurrentPage}>
+                                全选当前页
+                            </button>
+                        </div>
+                        <ul className={CL.pickList}>
+                            {(() => {
+                                const startIndex = (songsCurrentPage - 1) * pageSize;
+                                const endIndex = startIndex + pageSize;
+                                const paginatedSongs = filteredAllSongs.slice(startIndex, endIndex);
+                                return paginatedSongs.map((song) => (
+                                    <li key={song.id} className={CL.pickItem}>
+                                        <label>
+                                            <input
+                                                type="checkbox"
+                                                checked={selectedSongIds.includes(song.id)}
+                                                onChange={(event) => onToggleSong(song.id, event.target.checked)}
+                                                className={CL.checkbox}
+                                            />
+                                            <span>{song.title} - {song.artist} ({formatTime(song.duration)})</span>
+                                        </label>
+                                    </li>
+                                ));
+                            })()}
+                        </ul>
+                        <Pagination
+                            currentPage={songsCurrentPage}
+                            totalPages={songsTotalPages}
+                            onPageChange={onSongsPageChange}
+                        />
+                    </div>
                 )}
 
                 {activeTab === 'playlists' && (
@@ -238,25 +275,52 @@ export default function SongPickerDialog(props: SongPickerDialogProps) {
                                         >
                                             {expanded ? '收起' : '展开'}
                                         </button>
-                                        <button type="button" className={CL.sourceBtn} onClick={() => onSelectAllFromSourcePlaylist(playlist.id)}>全选</button>
+                                        <button type="button" className={CL.sourceBtn} onClick={() => onSelectAllFromSourcePlaylist(playlist.id)}>全选所有</button>
+                                        <button type="button" className={CL.sourceBtn} onClick={() => onSelectAllCurrentPageFromSourcePlaylist(playlist.id)}>全选当前页</button>
                                         <button type="button" className={CL.sourceBtn} onClick={() => onClearSelectionFromSourcePlaylist(playlist.id)}>取消全选</button>
                                     </div>
                                     {expanded && (
-                                        <ul className={`${CL.pickList} ${CL.pickListNested}`}>
-                                            {songs.map((song) => (
-                                                <li key={song.id} className={CL.pickItem}>
-                                                    <label>
-                                                        <input
-                                                            type="checkbox"
-                                                            checked={selectedSongIds.includes(song.id)}
-                                                            onChange={(event) => onToggleSong(song.id, event.target.checked)}
-                                                            className={CL.checkbox}
-                                                        />
-                                                        <span>{song.title} - {song.artist} ({formatTime(song.duration)})</span>
-                                                    </label>
-                                                </li>
-                                            ))}
-                                        </ul>
+                                        <div>
+                                            <ul className={`${CL.pickList} ${CL.pickListNested}`}>
+                                                {(() => {
+                                                    const pagination = sourcePlaylistPagination[playlist.id];
+                                                    const currentPage = pagination?.currentPage || 1;
+                                                    const startIndex = (currentPage - 1) * pageSize;
+                                                    const endIndex = startIndex + pageSize;
+                                                    const paginatedSongs = songs.slice(startIndex, endIndex);
+                                                    return paginatedSongs.map((song) => (
+                                                        <li key={song.id} className={CL.pickItem}>
+                                                            <label>
+                                                                <input
+                                                                    type="checkbox"
+                                                                    checked={selectedSongIds.includes(song.id)}
+                                                                    onChange={(event) => onToggleSong(song.id, event.target.checked)}
+                                                                    className={CL.checkbox}
+                                                                />
+                                                                <span>{song.title} - {song.artist} ({formatTime(song.duration)})</span>
+                                                            </label>
+                                                        </li>
+                                                    ));
+                                                })()}
+                                            </ul>
+                                            {(() => {
+                                                const pagination = sourcePlaylistPagination[playlist.id];
+                                                const totalPages = pagination?.totalPages || 1;
+                                                const currentPage = pagination?.currentPage || 1;
+                                                if (totalPages > 1) {
+                                                    return (
+                                                        <div className="mt-2">
+                                                            <Pagination
+                                                                currentPage={currentPage}
+                                                                totalPages={totalPages}
+                                                                onPageChange={(page) => onSourcePlaylistPageChange(playlist.id, page)}
+                                                            />
+                                                        </div>
+                                                    );
+                                                }
+                                                return null;
+                                            })()}
+                                        </div>
                                     )}
                                 </li>
                             );

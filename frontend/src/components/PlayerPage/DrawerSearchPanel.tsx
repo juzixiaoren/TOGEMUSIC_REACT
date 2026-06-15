@@ -2,6 +2,7 @@ import axios from 'axios';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useMessage } from '../../context/MessageContext';
 import type { Playlist, Song } from './types';
+import Pagination from '../PlaylistManager/Pagination';
 
 const CL = {
     // 面板基础样式（不含 translate）
@@ -79,10 +80,15 @@ type DrawerSearchPanelProps = {
     selectedSongs: number[];
     onTogglePlaylistExpand: (playlistId: number) => void;
     onSelectAllFromPlaylist: (playlistId: number) => void;
+    onSelectAllCurrentPageFromPlaylist: (playlistId: number) => void;
     onClearSelectionFromPlaylist: (playlistId: number) => void;
     onToggleSong: (songId: number, checked: boolean) => void;
     onImportSelectedSongs: () => void;
     onSongImported: () => void;
+    // 分页相关
+    playlistPagination: Record<number, { currentPage: number, totalPages: number }>;
+    onPlaylistPageChange: (playlistId: number, page: number) => void;
+    pageSize: number;
 };
 
 // QQ 音乐搜索结果标准化
@@ -150,10 +156,14 @@ export default function DrawerSearchPanel({
     selectedSongs,
     onTogglePlaylistExpand,
     onSelectAllFromPlaylist,
+    onSelectAllCurrentPageFromPlaylist,
     onClearSelectionFromPlaylist,
     onToggleSong,
     onImportSelectedSongs,
     onSongImported,
+    playlistPagination,
+    onPlaylistPageChange,
+    pageSize,
 }: DrawerSearchPanelProps) {
     const { setMessage } = useMessage();
     const authHeader = useMemo(
@@ -420,48 +430,79 @@ export default function DrawerSearchPanel({
                                                 {isExpanded ? '▼' : '▶'}
                                             </button>
                                             <span className={CL.playlistName}>{playlist.playlist_name}</span>
-                                            <button type="button" className={CL.selectBtn} onClick={() => onSelectAllFromPlaylist(playlist.id)}>全选</button>
+                                            <span className="text-xs text-text-quaternary mr-2">
+                                                {songs.length} 首
+                                            </span>
+                                            <button type="button" className={CL.selectBtn} onClick={() => onSelectAllFromPlaylist(playlist.id)}>全选所有</button>
+                                            <button type="button" className={CL.selectBtn} onClick={() => onSelectAllCurrentPageFromPlaylist(playlist.id)}>全选当前页</button>
                                             <button type="button" className={CL.selectBtn} onClick={() => onClearSelectionFromPlaylist(playlist.id)}>取消</button>
                                         </div>
                                         {isExpanded && (
-                                            <ul className={CL.songsList}>
-                                                <li>
-                                                    <input
-                                                        type="text"
-                                                        className={CL.songFilterInput}
-                                                        placeholder="搜索歌名或歌手..."
-                                                        value={songFilter}
-                                                        onChange={(e) => setSongFilter(e.target.value)}
-                                                    />
-                                                </li>
+                                            <div>
+                                                <ul className={CL.songsList}>
+                                                    <li>
+                                                        <input
+                                                            type="text"
+                                                            className={CL.songFilterInput}
+                                                            placeholder="搜索歌名或歌手..."
+                                                            value={songFilter}
+                                                            onChange={(e) => setSongFilter(e.target.value)}
+                                                        />
+                                                    </li>
+                                                    {(() => {
+                                                        const filterLower = songFilter.trim().toLowerCase();
+                                                        const filteredSongs = filterLower
+                                                            ? songs.filter((song) =>
+                                                                song.title.toLowerCase().includes(filterLower) ||
+                                                                song.artist.toLowerCase().includes(filterLower)
+                                                            )
+                                                            : songs;
+                                                        
+                                                        // 分页逻辑
+                                                        const pagination = playlistPagination[playlist.id];
+                                                        const currentPage = pagination?.currentPage || 1;
+                                                        const startIndex = (currentPage - 1) * pageSize;
+                                                        const endIndex = startIndex + pageSize;
+                                                        const paginatedSongs = filteredSongs.slice(startIndex, endIndex);
+                                                        
+                                                        if (filteredSongs.length === 0) {
+                                                            return (
+                                                                <li className={CL.filterEmpty}>无匹配歌曲</li>
+                                                            );
+                                                        }
+                                                        return paginatedSongs.map((song) => (
+                                                            <li key={song.id} className={CL.songItem}>
+                                                                <label className={CL.songLabel}>
+                                                                    <input
+                                                                        type="checkbox"
+                                                                        checked={selectedSongs.includes(song.id)}
+                                                                        onChange={(e) => onToggleSong(song.id, e.target.checked)}
+                                                                    />
+                                                                    <span className={CL.songTitle}>{song.title}</span>
+                                                                    <span className={CL.songArtist}>{song.artist}</span>
+                                                                </label>
+                                                            </li>
+                                                        ));
+                                                    })()}
+                                                </ul>
                                                 {(() => {
-                                                    const filterLower = songFilter.trim().toLowerCase();
-                                                    const filteredSongs = filterLower
-                                                        ? songs.filter((song) =>
-                                                            song.title.toLowerCase().includes(filterLower) ||
-                                                            song.artist.toLowerCase().includes(filterLower)
-                                                        )
-                                                        : songs;
-                                                    if (filteredSongs.length === 0) {
+                                                    const pagination = playlistPagination[playlist.id];
+                                                    const totalPages = pagination?.totalPages || 1;
+                                                    const currentPage = pagination?.currentPage || 1;
+                                                    if (totalPages > 1) {
                                                         return (
-                                                            <li className={CL.filterEmpty}>无匹配歌曲</li>
+                                                            <div className="mt-2 px-3">
+                                                                <Pagination
+                                                                    currentPage={currentPage}
+                                                                    totalPages={totalPages}
+                                                                    onPageChange={(page) => onPlaylistPageChange(playlist.id, page)}
+                                                                />
+                                                            </div>
                                                         );
                                                     }
-                                                    return filteredSongs.map((song) => (
-                                                        <li key={song.id} className={CL.songItem}>
-                                                            <label className={CL.songLabel}>
-                                                                <input
-                                                                    type="checkbox"
-                                                                    checked={selectedSongs.includes(song.id)}
-                                                                    onChange={(e) => onToggleSong(song.id, e.target.checked)}
-                                                                />
-                                                                <span className={CL.songTitle}>{song.title}</span>
-                                                                <span className={CL.songArtist}>{song.artist}</span>
-                                                            </label>
-                                                        </li>
-                                                    ));
+                                                    return null;
                                                 })()}
-                                            </ul>
+                                            </div>
                                         )}
                                     </li>
                                 );

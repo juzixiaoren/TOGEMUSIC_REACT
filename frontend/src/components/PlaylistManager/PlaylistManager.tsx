@@ -2,7 +2,7 @@ import axios from 'axios';
 import { useCallback, useMemo, useState } from 'react';
 import { useMessage } from '../../context/MessageContext';
 import { usePlaylist } from '../../context/PlaylistContext';
-import SongPickerDialog from './SongPickerDialog';
+import SongPickerDialog, { filterAndSortSongs } from './SongPickerDialog';
 import PlatformPlaylistImport from './PlatformPlaylistImport';
 import Pagination from './Pagination';
 import type { Playlist, Song, SortBy } from './types';
@@ -46,6 +46,52 @@ export default function PlaylistManager() {
     } = usePlaylist();
 
     const [sourcePlaylistSongsMap, setSourcePlaylistSongsMap] = useState<Record<number, Song[]>>({});
+    const [selectedPlaylistSongIds, setSelectedPlaylistSongIds] = useState<number[]>([]);
+
+    const getAuthHeader = useCallback(() => ({
+        Authorization: localStorage.getItem('token') || ''
+    }), []);
+    
+    // 全选当前歌单的所有歌曲
+    const selectAllPlaylistSongs = useCallback(async () => {
+        if (!selectedPlaylistId) {
+            setMessage('请先选择歌单', 'warning');
+            return;
+        }
+        try {
+            const response = await axios.get(`/playlists/${selectedPlaylistId}/all-songs`, { headers: getAuthHeader() });
+            const songs = (response.data?.songs || []) as Song[];
+            const allIds = songs.map(song => song.id);
+            setSelectedPlaylistSongIds(allIds);
+            setMessage(`已全选 ${allIds.length} 首歌曲`, 'success');
+        } catch {
+            setMessage('获取歌单歌曲失败', 'error');
+        }
+    }, [selectedPlaylistId, setMessage, getAuthHeader]);
+
+    // 全选当前页的歌曲
+    const selectAllCurrentPageSongs = useCallback(() => {
+        const pageSongIds = playlistSongs.map(song => song.id);
+        setSelectedPlaylistSongIds(prev => {
+            const merged = new Set([...prev, ...pageSongIds]);
+            return [...merged];
+        });
+        setMessage(`已全选当前页 ${pageSongIds.length} 首歌曲`, 'success');
+    }, [playlistSongs, setMessage]);
+
+    // 切换歌曲选中状态
+    const togglePlaylistSongSelection = useCallback((songId: number, checked: boolean) => {
+        setSelectedPlaylistSongIds(prev => {
+            if (checked) {
+                if (prev.includes(songId)) {
+                    return prev;
+                }
+                return [...prev, songId];
+            } else {
+                return prev.filter(id => id !== songId);
+            }
+        });
+    }, []);
 
     const [showCreateDialog, setShowCreateDialog] = useState(false);
     const [showImportDialog, setShowImportDialog] = useState(false);
@@ -59,10 +105,63 @@ export default function PlaylistManager() {
     const [selectedSongIds, setSelectedSongIds] = useState<number[]>([]);
     const [selectedSourcePlaylistIds, setSelectedSourcePlaylistIds] = useState<number[]>([]);
     const [expandedSourcePlaylistIds, setExpandedSourcePlaylistIds] = useState<number[]>([]);
-
-    const getAuthHeader = useCallback(() => ({
-        Authorization: localStorage.getItem('token') || ''
-    }), []);
+    
+    // SongPickerDialog 分页状态
+    const [songsCurrentPage, setSongsCurrentPage] = useState(1);
+    const [sourcePlaylistPagination, setSourcePlaylistPagination] = useState<Record<number, { currentPage: number, totalPages: number }>>({});
+    const songPickerPageSize = 100;
+    
+    // 计算歌曲总页数
+    const songsTotalPages = useMemo(() => {
+        const filteredSongs = filterAndSortSongs(allSongs, searchQuery, filterUser, sortBy);
+        return Math.max(1, Math.ceil(filteredSongs.length / songPickerPageSize));
+    }, [allSongs, searchQuery, filterUser, sortBy, songPickerPageSize]);
+    
+    // 歌曲页变化处理
+    const handleSongsPageChange = useCallback((page: number) => {
+        setSongsCurrentPage(page);
+    }, []);
+    
+    // 源歌单页变化处理
+    const handleSourcePlaylistPageChange = useCallback((playlistId: number, page: number) => {
+        setSourcePlaylistPagination(prev => ({
+            ...prev,
+            [playlistId]: {
+                ...prev[playlistId],
+                currentPage: page
+            }
+        }));
+    }, []);
+    
+    // 全选当前页的歌曲（SongPickerDialog songs tab）
+    const selectAllCurrentPageForPicker = useCallback(() => {
+        const filteredSongs = filterAndSortSongs(allSongs, searchQuery, filterUser, sortBy);
+        const startIndex = (songsCurrentPage - 1) * songPickerPageSize;
+        const endIndex = startIndex + songPickerPageSize;
+        const pageSongs = filteredSongs.slice(startIndex, endIndex);
+        const pageSongIds = pageSongs.map(song => song.id);
+        setSelectedSongIds(prev => {
+            const merged = new Set([...prev, ...pageSongIds]);
+            return [...merged];
+        });
+        setMessage(`已全选当前页 ${pageSongIds.length} 首歌曲`, 'success');
+    }, [allSongs, searchQuery, filterUser, sortBy, songsCurrentPage, songPickerPageSize, setMessage]);
+    
+    // 全选当前页的歌曲（SongPickerDialog playlists tab）
+    const selectAllCurrentPageFromSourcePlaylist = useCallback((playlistId: number) => {
+        const songs = sourcePlaylistSongsMap[playlistId] || [];
+        const pagination = sourcePlaylistPagination[playlistId];
+        const currentPage = pagination?.currentPage || 1;
+        const startIndex = (currentPage - 1) * songPickerPageSize;
+        const endIndex = startIndex + songPickerPageSize;
+        const pageSongs = songs.slice(startIndex, endIndex);
+        const pageSongIds = pageSongs.map(song => song.id);
+        setSelectedSongIds(prev => {
+            const merged = new Set([...prev, ...pageSongIds]);
+            return [...merged];
+        });
+        setMessage(`已全选当前页 ${pageSongIds.length} 首歌曲`, 'success');
+    }, [sourcePlaylistSongsMap, sourcePlaylistPagination, songPickerPageSize, setMessage]);
 
     const resetPickerState = useCallback(() => {
         setActiveTab('songs');
@@ -72,6 +171,8 @@ export default function PlaylistManager() {
         setSelectedSongIds([]);
         setSelectedSourcePlaylistIds([]);
         setExpandedSourcePlaylistIds([]);
+        setSongsCurrentPage(1);
+        setSourcePlaylistPagination({});
     }, []);
 
     const availableSourcePlaylists = useMemo(() => {
@@ -289,8 +390,15 @@ export default function PlaylistManager() {
 
             <div className={CL.panel}>
                 <div className={CL.header}>
-                    <h2 className={CL.headerTitle}>{selectedPlaylist?.playlist_name || '请选择歌单'}</h2>
+                    <div className="flex items-center gap-4">
+                        <h2 className={CL.headerTitle}>{selectedPlaylist?.playlist_name || '请选择歌单'}</h2>
+                        <span className="text-sm text-text-quaternary">
+                            已选 {selectedPlaylistSongIds.length} 首
+                        </span>
+                    </div>
                     <div className={CL.headerBtns}>
+                        <button type="button" className={CL.secondaryBtn} onClick={() => { void selectAllPlaylistSongs(); }}>全选所有</button>
+                        <button type="button" className={CL.secondaryBtn} onClick={selectAllCurrentPageSongs}>全选当前页</button>
                         <button type="button" className={CL.primaryBtn} onClick={() => {
                             if (!selectedPlaylistId) {
                                 setMessage('请先选择歌单', 'warning');
@@ -304,7 +412,13 @@ export default function PlaylistManager() {
                 <ul className={CL.songList}>
                     {playlistSongs.map((song) => (
                         <li key={song.id} className={CL.songItem}>
-                            <div>
+                            <input
+                                type="checkbox"
+                                checked={selectedPlaylistSongIds.includes(song.id)}
+                                onChange={(e) => togglePlaylistSongSelection(song.id, e.target.checked)}
+                                className="mr-2"
+                            />
+                            <div className="flex-1">
                                 <div className={CL.songTitle}>{song.title}</div>
                                 <div className={CL.songSub}>{song.artist}</div>
                             </div>
@@ -355,6 +469,14 @@ export default function PlaylistManager() {
                     setShowCreateDialog(false);
                     resetPickerState();
                 }}
+                songsCurrentPage={songsCurrentPage}
+                songsTotalPages={songsTotalPages}
+                onSongsPageChange={handleSongsPageChange}
+                sourcePlaylistPagination={sourcePlaylistPagination}
+                onSourcePlaylistPageChange={handleSourcePlaylistPageChange}
+                pageSize={songPickerPageSize}
+                onSelectAllCurrentPage={selectAllCurrentPageForPicker}
+                onSelectAllCurrentPageFromSourcePlaylist={selectAllCurrentPageFromSourcePlaylist}
             />
 
             <SongPickerDialog
@@ -388,6 +510,14 @@ export default function PlaylistManager() {
                     setShowImportDialog(false);
                     resetPickerState();
                 }}
+                songsCurrentPage={songsCurrentPage}
+                songsTotalPages={songsTotalPages}
+                onSongsPageChange={handleSongsPageChange}
+                sourcePlaylistPagination={sourcePlaylistPagination}
+                onSourcePlaylistPageChange={handleSourcePlaylistPageChange}
+                pageSize={songPickerPageSize}
+                onSelectAllCurrentPage={selectAllCurrentPageForPicker}
+                onSelectAllCurrentPageFromSourcePlaylist={selectAllCurrentPageFromSourcePlaylist}
             />
 
             <PlatformPlaylistImport

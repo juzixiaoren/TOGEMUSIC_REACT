@@ -28,7 +28,8 @@ export default function PlayerPage() {
     const {
         registerEventHandlers,
         unregisterEventHandlers,
-        onlineUsers
+        onlineUsers,
+        emitToggleLoopMode
     } = useSocket();
 
     const [playlists, setPlaylists] = useState<Playlist[]>([]);
@@ -36,6 +37,7 @@ export default function PlayerPage() {
     const [selectedSongs, setSelectedSongs] = useState<number[]>([]);
     const [expandedPlaylist, setExpandedPlaylist] = useState<number | null>(null);
     const [playlistSongsMap, setPlaylistSongsMap] = useState<Record<number, Song[]>>({});
+    const [playlistPagination, setPlaylistPagination] = useState<Record<number, { currentPage: number, totalPages: number }>>({});
     const [currentSong, setCurrentSong] = useState<Song | null>(null);
     const [draggedIndex, setDraggedIndex] = useState<number | null>(null);
     const [currentSongCoverUrl, setCurrentSongCoverUrl] = useState<string | null>(null);
@@ -45,6 +47,15 @@ export default function PlayerPage() {
     const currentSongIdRef = useRef<number | null>(null);
     const [allSongs, setAllSongs] = useState<Song[]>([]);
     const [drawerOpen, setDrawerOpen] = useState(false);
+    
+    // 播放列表分页状态
+    const [playlistPage, setPlaylistPage] = useState(1);
+    const [playlistPageSize] = useState(10);
+    const [playlistTotalPages, setPlaylistTotalPages] = useState(1);
+    // 播放列表搜索
+    const [playlistSearchQuery, setPlaylistSearchQuery] = useState('');
+    // 循环播放模式
+    const [loopMode, setLoopMode] = useState(true);
 
     const clearEndedFallbackTimer = useCallback(() => {
         if (endedFallbackTimerRef.current !== null) {
@@ -68,12 +79,46 @@ export default function PlayerPage() {
     }, [authHeader, setMessage]);
 
     const displayPlaylist = useMemo(() => {
-        if (!currentSong) {
-            return currentPlaylist;
+        // 先搜索过滤
+        const query = playlistSearchQuery.trim().toLowerCase();
+        const filteredPlaylist = query
+            ? currentPlaylist.filter(song =>
+                song.title.toLowerCase().includes(query) ||
+                song.artist.toLowerCase().includes(query)
+            )
+            : currentPlaylist;
+        
+        // 计算总页数（基于过滤后的列表）
+        const totalPages = Math.max(1, Math.ceil(filteredPlaylist.length / playlistPageSize));
+        if (playlistTotalPages !== totalPages) {
+            setPlaylistTotalPages(totalPages);
         }
-        const remaining = currentPlaylist.filter((song) => song.id !== currentSong.id);
-        return [currentSong, ...remaining];
-    }, [currentPlaylist, currentSong]);
+        // 确保当前页不超出范围
+        const validPage = Math.min(playlistPage, totalPages);
+        if (validPage !== playlistPage) {
+            setPlaylistPage(validPage);
+        }
+        
+        // 计算当前页的歌曲范围
+        const startIndex = (validPage - 1) * playlistPageSize;
+        const endIndex = startIndex + playlistPageSize;
+        let pageSongs = filteredPlaylist.slice(startIndex, endIndex);
+        
+        if (!currentSong) {
+            return pageSongs;
+        }
+        
+        // 检查当前歌曲是否在当前页
+        const currentSongInPage = pageSongs.some(song => song.id === currentSong.id);
+        if (currentSongInPage) {
+            // 将当前歌曲移到第一位
+            const remaining = pageSongs.filter(song => song.id !== currentSong.id);
+            return [currentSong, ...remaining];
+        } else {
+            // 当前歌曲不在当前页，将其插入到第一位
+            return [currentSong, ...pageSongs];
+        }
+    }, [currentPlaylist, currentSong, playlistPage, playlistPageSize, playlistSearchQuery, playlistTotalPages]);
 
     const progressPercentage = useMemo(() => {
         if (!currentSong || !currentSong.duration) {
@@ -183,12 +228,45 @@ export default function PlayerPage() {
         }
     }, [authHeader, setMessage]);
 
-    // 加载默认播放列表
+    // 置顶：将歌曲移到当前播放歌曲之后（列表第二位）
+    const handlePinToTop = useCallback((songId: number) => {
+        setCurrentPlaylist((prev) => {
+            const idx = prev.findIndex(s => s.id === songId);
+            if (idx <= 0) return prev; // 已在首位或是当前播放歌曲
+            const song = prev[idx];
+            const remaining = prev.filter((_, i) => i !== idx);
+            // 插入到第二位（当前播放歌曲之后）
+            const newPlaylist = [remaining[0], song, ...remaining.slice(1)];
+            void syncPlaylistOrder(newPlaylist);
+            return newPlaylist;
+        });
+    }, [syncPlaylistOrder]);
+
+    // 置底：将歌曲移到列表末尾
+    const handlePinToBottom = useCallback((songId: number) => {
+        setCurrentPlaylist((prev) => {
+            const idx = prev.findIndex(s => s.id === songId);
+            if (idx < 0 || idx === prev.length - 1) return prev;
+            const song = prev[idx];
+            const remaining = prev.filter((_, i) => i !== idx);
+            const newPlaylist = [...remaining, song];
+            void syncPlaylistOrder(newPlaylist);
+            return newPlaylist;
+        });
+    }, [syncPlaylistOrder]);
+
+    // 加载默认播放列表（获取所有歌曲）
     const loadDefaultPlaylist = useCallback(async () => {
         try {
-            const response = await axios.get(`/playlists/${MAIN_PLAYLIST_ID}`, { headers: authHeader });
+            const response = await axios.get(`/playlists/${MAIN_PLAYLIST_ID}/all-songs`, { headers: authHeader });
             const songs = (response.data?.songs || []) as Song[];
             setCurrentPlaylist(songs);
+            // 计算总页数
+            const totalPages = Math.max(1, Math.ceil(songs.length / playlistPageSize));
+            setPlaylistTotalPages(totalPages);
+            // 重置到第一页
+            setPlaylistPage(1);
+            
             if (songs.length === 0) {
                 setCurrentSong(null);
                 stopPlayback();
@@ -201,7 +279,14 @@ export default function PlayerPage() {
         } catch {
             setMessage('加载默认歌单失败', 'error');
         }
-    }, [authHeader, setMessage, stopPlayback]);
+    }, [authHeader, setMessage, stopPlayback, playlistPageSize]);
+
+
+
+    // 播放列表分页变化
+    const handlePlaylistPageChange = useCallback((page: number) => {
+        setPlaylistPage(page);
+    }, []);
 
     // 加载所有歌单
     const loadPlaylists = useCallback(async () => {
@@ -274,17 +359,25 @@ export default function PlayerPage() {
         }
 
         try {
-            const response = await axios.get(`/playlists/${playlistId}`, { headers: authHeader });
+            const response = await axios.get(`/playlists/${playlistId}/all-songs`, { headers: authHeader });
             const songs = (response.data?.songs || []) as Song[];
             setPlaylistSongsMap((prev) => ({
                 ...prev,
                 [playlistId]: songs
             }));
+            
+            // 计算分页
+            const totalPages = Math.max(1, Math.ceil(songs.length / playlistPageSize));
+            setPlaylistPagination((prev) => ({
+                ...prev,
+                [playlistId]: { currentPage: 1, totalPages }
+            }));
+            
             setMessage('歌单的歌曲加载完成', 'success');
         } catch {
             setMessage('加载歌单失败', 'error');
         }
-    }, [authHeader, expandedPlaylist, playlistSongsMap, setMessage]);
+    }, [authHeader, expandedPlaylist, playlistSongsMap, setMessage, playlistPageSize]);
 
     const selectAllFromPlaylist = useCallback((playlistId: number) => {
         const songs = playlistSongsMap[playlistId] || [];
@@ -293,6 +386,31 @@ export default function PlayerPage() {
             return [...merged];
         });
     }, [playlistSongsMap]);
+
+    // 全选歌单当前页的歌曲
+    const selectAllCurrentPageFromPlaylist = useCallback((playlistId: number) => {
+        const songs = playlistSongsMap[playlistId] || [];
+        const pagination = playlistPagination[playlistId];
+        if (!pagination) return;
+        
+        const startIndex = (pagination.currentPage - 1) * playlistPageSize;
+        const endIndex = startIndex + playlistPageSize;
+        const pageSongs = songs.slice(startIndex, endIndex);
+        const pageSongIds = pageSongs.map(song => song.id);
+        
+        setSelectedSongs((prev) => {
+            const merged = new Set([...prev, ...pageSongIds]);
+            return [...merged];
+        });
+    }, [playlistSongsMap, playlistPagination, playlistPageSize]);
+
+    // 歌单分页变化
+    const handleSourcePlaylistPageChange = useCallback((playlistId: number, page: number) => {
+        setPlaylistPagination((prev) => ({
+            ...prev,
+            [playlistId]: { ...prev[playlistId], currentPage: page }
+        }));
+    }, []);
 
     const clearSelectionFromPlaylist = useCallback((playlistId: number) => {
         const songs = playlistSongsMap[playlistId] || [];
@@ -323,14 +441,38 @@ export default function PlayerPage() {
             }, {
                 headers: authHeader
             });
-            await loadDefaultPlaylist();
+            // 加载更新后的播放列表
+            const response = await axios.get(`/playlists/${MAIN_PLAYLIST_ID}/all-songs`, { headers: authHeader });
+            const songs = (response.data?.songs || []) as Song[];
+            
+            // 自动置顶：将新导入的歌曲移到列表前面（当前播放歌曲之后）
+            const importedSet = new Set(selectedSongs);
+            const currentSongObj = songs.find(s => s.id === currentSongIdRef.current);
+            const importedSongs = songs.filter(s => importedSet.has(s.id));
+            const otherSongs = songs.filter(s => !importedSet.has(s.id) && s.id !== currentSongIdRef.current);
+            
+            let reordered: Song[];
+            if (currentSongObj) {
+                reordered = [currentSongObj, ...importedSongs, ...otherSongs];
+            } else {
+                reordered = [...importedSongs, ...otherSongs];
+            }
+            
+            setCurrentPlaylist(reordered);
+            const totalPages = Math.max(1, Math.ceil(reordered.length / playlistPageSize));
+            setPlaylistTotalPages(totalPages);
+            setPlaylistPage(1);
+            
+            // 同步新顺序到后端
+            await syncPlaylistOrder(reordered);
+            
             setDrawerOpen(false);
             setSelectedSongs([]);
             setMessage('导入歌曲成功', 'success');
         } catch {
             setMessage('导入歌曲失败', 'error');
         }
-    }, [authHeader, loadDefaultPlaylist, selectedSongs, setMessage]);
+    }, [authHeader, selectedSongs, setMessage, playlistPageSize, syncPlaylistOrder]);
 
     // 检查播放状态并同步
     // eslint-disable-next-line react-hooks/preserve-manual-memoization
@@ -413,6 +555,16 @@ export default function PlayerPage() {
         }
     }, [authHeader, checkAndSyncPlayStatus, currentPlaylist, setMessage]);
 
+    // 切换循环播放模式
+    const toggleLoopMode = useCallback(() => {
+        const newMode = !loopMode;
+        setLoopMode(newMode);
+        // 通知后端
+        if (emitToggleLoopMode) {
+            emitToggleLoopMode(newMode);
+        }
+    }, [loopMode, emitToggleLoopMode]);
+
     // 注册 Socket 事件处理器
     useEffect(() => {
         const handlers: SocketEventHandlers = {
@@ -482,12 +634,21 @@ export default function PlayerPage() {
                         setMessage('已同步歌曲信息（点击页面任意位置解锁播放）', 'warning');
                     }
                 }
+                // 同步循环模式状态
+                if (data.loop_mode !== undefined) {
+                    setLoopMode(data.loop_mode);
+                }
             },
 
             // 初始播放列表同步
             onSyncPlaylist: (data) => {
                 setCurrentPlaylist(data.songs || []);
                 setMessage('已同步播放列表', 'success');
+            },
+
+            // 循环模式变化
+            onLoopModeChanged: (data) => {
+                setLoopMode(data.enabled);
             }
         };
 
@@ -553,6 +714,8 @@ export default function PlayerPage() {
                         onOpenImportDialog={() => setDrawerOpen(true)}
                         onVolumeChange={handleSetVolume}
                         onCoverLoadFailed={() => setCurrentSongCoverUrl(null)}
+                        loopMode={loopMode}
+                        onToggleLoop={toggleLoopMode}
                     />
                     <PlaylistPanel
                         displayPlaylist={displayPlaylist}
@@ -576,6 +739,15 @@ export default function PlayerPage() {
                             void syncPlaylistOrder(newPlaylist);
                         }}
                         onDragEnd={() => setDraggedIndex(null)}
+                        totalSongs={currentPlaylist.length}
+                        currentPage={playlistPage}
+                        pageSize={playlistPageSize}
+                        totalPages={playlistTotalPages}
+                        onPageChange={handlePlaylistPageChange}
+                        searchQuery={playlistSearchQuery}
+                        onSearchChange={setPlaylistSearchQuery}
+                        onPinToTop={handlePinToTop}
+                        onPinToBottom={handlePinToBottom}
                     />
                 </div>
 
@@ -598,10 +770,14 @@ export default function PlayerPage() {
                     selectedSongs={selectedSongs}
                     onTogglePlaylistExpand={(playlistId) => { void togglePlaylistExpand(playlistId); }}
                     onSelectAllFromPlaylist={selectAllFromPlaylist}
+                    onSelectAllCurrentPageFromPlaylist={selectAllCurrentPageFromPlaylist}
                     onClearSelectionFromPlaylist={clearSelectionFromPlaylist}
                     onToggleSong={toggleSongSelection}
                     onImportSelectedSongs={() => { void importSelectedSongs(); }}
                     onSongImported={() => { void syncPlaylistsAndStatus(); }}
+                    playlistPagination={playlistPagination}
+                    onPlaylistPageChange={handleSourcePlaylistPageChange}
+                    pageSize={playlistPageSize}
                 />
             </div>
 

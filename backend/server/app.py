@@ -1,6 +1,7 @@
 import sys
 import os
 import random
+import collections
 
 # 首先设置模块搜索路径，让 Python 能找到 dao 包
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..'))
@@ -21,6 +22,11 @@ from routes.cookie import cookie_bp, register_cookie_tasks
 from dao.user import User
 
 user_model = User()
+
+# 循环播放模式：True 表示开启（当前行为，歌曲轮播），False 表示关闭（播放过的歌曲进入历史队列）
+loop_mode = True
+# 历史队列：循环关闭时，播放过的歌曲信息存入此队列（最大长度10）
+history_queue = collections.deque(maxlen=10)
 
 scheduler = None
 socketio_async_mode = os.getenv("SOCKETIO_ASYNC_MODE", "threading")
@@ -141,7 +147,25 @@ def trigger_next_song():
     切换到下一首歌曲并设置新的定时器
     由定时器或客户端通知触发
     """
+    global loop_mode, history_queue
     try:
+        # 循环关闭时，将当前歌曲信息存入历史队列
+        if not loop_mode:
+            try:
+                cursor = song_model.execute("""
+                    SELECT s.id, s.title, s.artist, s.duration, s.uploader_id, s.file_path, s.file_extension, s.time_added
+                    FROM songs s
+                    JOIN playlist_songs ps ON s.id = ps.song_id
+                    WHERE ps.playlist_id = 1 AND ps.order_index = 1
+                """)
+                row = cursor.fetchone()
+                if row:
+                    current_song_info = dict(row)
+                    history_queue.append(current_song_info)
+                    print(f"📝 循环关闭，歌曲已加入历史队列：{current_song_info.get('title')}")
+            except Exception as e:
+                print(f"⚠️ 保存历史队列失败: {e}")
+
         # 切歌逻辑
         song_model.rotate_playlist_index()
         song_model.start_next_song()
@@ -249,7 +273,8 @@ def create_app():
                     'play_start_time': status["play_start_time"],
                     'is_playing': status["is_playing"],
                     'current_song': current_song,
-                    'server_now': now_ms()
+                    'server_now': now_ms(),
+                    'loop_mode': loop_mode
                 }, room=request.sid)
             
             # 发送当前播放列表
@@ -301,42 +326,124 @@ def create_app():
 
     @socketio.on('request_prev_song')
     def handle_prev_song(data=None):
+        global loop_mode, history_queue
         try:
-            cursor = song_model.execute("SELECT MAX(order_index) FROM playlist_songs WHERE playlist_id = 1")
-            max_index = cursor.fetchone()[0]
-            if max_index is None:
-                return {'success': False, 'error': 'Playlist is empty'}
+            # 循环关闭且历史队列非空时，从历史队列取上一首歌
+            if not loop_mode and len(history_queue) > 0:
+                prev_song = history_queue.pop()
+                song_id = prev_song.get('id')
+                print(f"⏮️ 从历史队列恢复上一首：{prev_song.get('title')} (ID: {song_id})")
 
-            with song_model.get_conn():
-                # 移最后一首到最前面
-                song_model.get_conn().execute(
-                    "UPDATE playlist_songs SET order_index = 0 WHERE playlist_id = 1 AND order_index = ?", (max_index,)
-                )
-                # 其他歌曲整体后移
-                song_model.get_conn().execute(
-                    "UPDATE playlist_songs SET order_index = order_index + 1 WHERE playlist_id = 1 AND order_index >= 1"
-                )
-                # 放回第一
-                song_model.get_conn().execute(
-                    "UPDATE playlist_songs SET order_index = 1 WHERE playlist_id = 1 AND order_index = 0"
-                )
-                song_model.get_conn().commit()
+                # 将该歌曲移到播放列表第一位置
+                cursor = song_model.execute("SELECT MAX(order_index) FROM playlist_songs WHERE playlist_id = 1")
+                max_index = cursor.fetchone()[0]
+                if max_index is None:
+                    return {'success': False, 'error': 'Playlist is empty'}
 
-            song_scheduler.cancel_current()
-            # 更新播放开始时间，避免补偿时间错误
-            song_model.start_next_song()
-            # 直接广播新的播放状态，而不是再次rotate (trigger_next_song会导致第二次rotate)
-            broadcast_song_changed()
-            
-            # 为新歌设置定时器
-            status = song_model.get_play_status()
-            duration = song_model.get_current_song_duration()
-            if status and duration and status["is_playing"]:
-                song_scheduler.schedule_song_end(
-                    status["play_start_time"],
-                    duration["duration"]
+                # 检查该歌曲是否在播放列表中
+                cursor = song_model.execute(
+                    "SELECT order_index FROM playlist_songs WHERE playlist_id = 1 AND song_id = ?", (song_id,)
                 )
-            return {'success': True}
+                existing = cursor.fetchone()
+
+                with song_model.get_conn():
+                    if existing:
+                        # 歌曲已在播放列表中，移到第一位置
+                        old_index = existing[0]
+                        if old_index != 1:
+                            # 将 order_index=1 的歌曲移到 old_index
+                            song_model.get_conn().execute(
+                                "UPDATE playlist_songs SET order_index = ? WHERE playlist_id = 1 AND order_index = 1", (old_index,)
+                            )
+                            # 将目标歌曲移到 order_index=1
+                            song_model.get_conn().execute(
+                                "UPDATE playlist_songs SET order_index = 1 WHERE playlist_id = 1 AND song_id = ?", (song_id,)
+                            )
+                    else:
+                        # 歌曲不在播放列表中，插入到第一位置
+                        # 其他歌曲整体后移
+                        song_model.get_conn().execute(
+                            "UPDATE playlist_songs SET order_index = order_index + 1 WHERE playlist_id = 1"
+                        )
+                        song_model.get_conn().execute(
+                            "INSERT INTO playlist_songs (playlist_id, song_id, order_index) VALUES (1, ?, 1)", (song_id,)
+                        )
+                    song_model.get_conn().commit()
+
+                song_scheduler.cancel_current()
+                song_model.start_next_song()
+                broadcast_song_changed()
+
+                status = song_model.get_play_status()
+                duration = song_model.get_current_song_duration()
+                if status and duration and status["is_playing"]:
+                    song_scheduler.schedule_song_end(
+                        status["play_start_time"],
+                        duration["duration"]
+                    )
+                return {'success': True}
+            else:
+                # 循环开启或历史队列为空，使用原有反向轮播逻辑
+                cursor = song_model.execute("SELECT MAX(order_index) FROM playlist_songs WHERE playlist_id = 1")
+                max_index = cursor.fetchone()[0]
+                if max_index is None:
+                    return {'success': False, 'error': 'Playlist is empty'}
+
+                with song_model.get_conn():
+                    # 移最后一首到最前面
+                    song_model.get_conn().execute(
+                        "UPDATE playlist_songs SET order_index = 0 WHERE playlist_id = 1 AND order_index = ?", (max_index,)
+                    )
+                    # 其他歌曲整体后移
+                    song_model.get_conn().execute(
+                        "UPDATE playlist_songs SET order_index = order_index + 1 WHERE playlist_id = 1 AND order_index >= 1"
+                    )
+                    # 放回第一
+                    song_model.get_conn().execute(
+                        "UPDATE playlist_songs SET order_index = 1 WHERE playlist_id = 1 AND order_index = 0"
+                    )
+                    song_model.get_conn().commit()
+
+                song_scheduler.cancel_current()
+                # 更新播放开始时间，避免补偿时间错误
+                song_model.start_next_song()
+                # 直接广播新的播放状态，而不是再次rotate (trigger_next_song会导致第二次rotate)
+                broadcast_song_changed()
+                
+                # 为新歌设置定时器
+                status = song_model.get_play_status()
+                duration = song_model.get_current_song_duration()
+                if status and duration and status["is_playing"]:
+                    song_scheduler.schedule_song_end(
+                        status["play_start_time"],
+                        duration["duration"]
+                    )
+                return {'success': True}
+        except Exception as e:
+            import traceback
+            traceback.print_exc()
+            return {'success': False, 'error': str(e)}
+
+    @socketio.on('toggle_loop_mode')
+    def handle_toggle_loop_mode(data=None):
+        """切换循环播放模式"""
+        global loop_mode, history_queue
+        try:
+            enabled = data.get('enabled') if data else None
+            if enabled is not None:
+                loop_mode = bool(enabled)
+            else:
+                loop_mode = not loop_mode
+
+            # 切换为循环模式时清空历史队列
+            if loop_mode:
+                history_queue.clear()
+                print("🔄 循环模式开启，已清空历史队列")
+            else:
+                print("🔄 循环模式关闭")
+
+            socketio.emit('loop_mode_changed', {'enabled': loop_mode}, room=None)
+            return {'success': True, 'enabled': loop_mode}
         except Exception as e:
             import traceback
             traceback.print_exc()

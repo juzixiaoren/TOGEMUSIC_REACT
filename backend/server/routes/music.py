@@ -1025,6 +1025,15 @@ def get_playlist(playlist_id):
         'total_pages': (total + page_size - 1) // page_size
     }), 200
 
+@music_bp.route('/playlists/<int:playlist_id>/all-songs', methods=['GET'])
+def get_all_playlist_songs(playlist_id):
+    """获取歌单中的所有歌曲（不分页），用于全选操作"""
+    songs = playlist_model.get_playlist_songs(playlist_id)
+    return jsonify({
+        'songs': [dict(s) for s in songs],
+        'total': len(songs)
+    }), 200
+
 @music_bp.route('/playlists/<int:playlist_id>/songs', methods=['POST'])
 def add_songs_to_playlist(playlist_id):
     data = request.get_json()
