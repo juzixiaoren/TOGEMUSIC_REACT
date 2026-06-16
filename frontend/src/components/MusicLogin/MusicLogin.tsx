@@ -383,12 +383,15 @@ export default function MusicLogin() {
 
             const result = importResp.data;
             let importMsg = `导入完成: 成功 ${result.imported} 首, 失败 ${result.failed} 首`;
+            if (result.skipped > 0) {
+                importMsg += `, 跳过(数据不完整) ${result.skipped} 首`;
+            }
             if (trackCount > 0 && result.imported < trackCount) {
                 importMsg += `（歌单共 ${trackCount} 首）`;
             }
             setMessage(
                 importMsg,
-                result.failed > 0 || result.imported < trackCount ? 'warning' : 'success'
+                result.failed > 0 || result.skipped > 0 || result.imported < trackCount ? 'warning' : 'success'
             );
         } catch (error: unknown) {
             const err = error as { response?: { data?: { message?: string } } };

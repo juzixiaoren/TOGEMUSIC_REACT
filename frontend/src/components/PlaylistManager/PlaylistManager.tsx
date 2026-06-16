@@ -48,11 +48,39 @@ export default function PlaylistManager() {
     const [sourcePlaylistSongsMap, setSourcePlaylistSongsMap] = useState<Record<number, Song[]>>({});
     const [selectedPlaylistSongIds, setSelectedPlaylistSongIds] = useState<number[]>([]);
 
+    // 歌单内歌曲筛选和批量操作
+    type SongFilter = 'all' | 'no_artist' | 'no_duration';
+    const [songFilter, setSongFilter] = useState<SongFilter>('all');
+    const [songSearchQuery, setSongSearchQuery] = useState('');
+
     const getAuthHeader = useCallback(() => ({
         Authorization: localStorage.getItem('token') || ''
     }), []);
+
+    // 根据筛选条件和搜索关键词过滤歌曲
+    const filteredPlaylistSongs = useMemo(() => {
+        let result = playlistSongs;
+        
+        // 应用筛选条件
+        if (songFilter === 'no_artist') {
+            result = result.filter(s => !s.artist);
+        } else if (songFilter === 'no_duration') {
+            result = result.filter(s => !s.duration);
+        }
+        
+        // 应用搜索关键词
+        if (songSearchQuery.trim()) {
+            const query = songSearchQuery.trim().toLowerCase();
+            result = result.filter(s =>
+                s.title.toLowerCase().includes(query) ||
+                (s.artist && s.artist.toLowerCase().includes(query))
+            );
+        }
+        
+        return result;
+    }, [playlistSongs, songFilter, songSearchQuery]);
     
-    // 全选当前歌单的所有歌曲
+    // 全选当前歌单的所有歌曲（支持筛选）
     const selectAllPlaylistSongs = useCallback(async () => {
         if (!selectedPlaylistId) {
             setMessage('请先选择歌单', 'warning');
@@ -60,24 +88,41 @@ export default function PlaylistManager() {
         }
         try {
             const response = await axios.get(`/playlists/${selectedPlaylistId}/all-songs`, { headers: getAuthHeader() });
-            const songs = (response.data?.songs || []) as Song[];
+            let songs = (response.data?.songs || []) as Song[];
+            
+            // 应用筛选条件
+            if (songFilter === 'no_artist') {
+                songs = songs.filter(s => !s.artist);
+            } else if (songFilter === 'no_duration') {
+                songs = songs.filter(s => !s.duration);
+            }
+            
+            // 应用搜索关键词
+            if (songSearchQuery.trim()) {
+                const query = songSearchQuery.trim().toLowerCase();
+                songs = songs.filter(s =>
+                    s.title.toLowerCase().includes(query) ||
+                    (s.artist && s.artist.toLowerCase().includes(query))
+                );
+            }
+            
             const allIds = songs.map(song => song.id);
             setSelectedPlaylistSongIds(allIds);
             setMessage(`已全选 ${allIds.length} 首歌曲`, 'success');
         } catch {
             setMessage('获取歌单歌曲失败', 'error');
         }
-    }, [selectedPlaylistId, setMessage, getAuthHeader]);
+    }, [selectedPlaylistId, setMessage, getAuthHeader, songFilter, songSearchQuery]);
 
-    // 全选当前页的歌曲
+    // 全选当前页的歌曲（支持筛选）
     const selectAllCurrentPageSongs = useCallback(() => {
-        const pageSongIds = playlistSongs.map(song => song.id);
+        const pageSongIds = filteredPlaylistSongs.map(song => song.id);
         setSelectedPlaylistSongIds(prev => {
             const merged = new Set([...prev, ...pageSongIds]);
             return [...merged];
         });
         setMessage(`已全选当前页 ${pageSongIds.length} 首歌曲`, 'success');
-    }, [playlistSongs, setMessage]);
+    }, [filteredPlaylistSongs, setMessage]);
 
     // 切换歌曲选中状态
     const togglePlaylistSongSelection = useCallback((songId: number, checked: boolean) => {
@@ -105,6 +150,8 @@ export default function PlaylistManager() {
     const [selectedSongIds, setSelectedSongIds] = useState<number[]>([]);
     const [selectedSourcePlaylistIds, setSelectedSourcePlaylistIds] = useState<number[]>([]);
     const [expandedSourcePlaylistIds, setExpandedSourcePlaylistIds] = useState<number[]>([]);
+
+    const [isBatchDeleting, setIsBatchDeleting] = useState(false);
     
     // SongPickerDialog 分页状态
     const [songsCurrentPage, setSongsCurrentPage] = useState(1);
@@ -328,6 +375,47 @@ export default function PlaylistManager() {
         return found?.id ?? null;
     }, [playlists]);
 
+    // 批量删除选中歌曲
+    const batchDeleteSelected = useCallback(async () => {
+        if (!selectedPlaylistId || selectedPlaylistSongIds.length === 0) {
+            setMessage('请先选择要删除的歌曲', 'warning');
+            return;
+        }
+
+        const count = selectedPlaylistSongIds.length;
+        const isAllSongsPlaylist = selectedPlaylistId === allSongsPlaylistId;
+        const actionText = isAllSongsPlaylist ? '永久删除' : '从歌单移除';
+        if (!confirm(`确定要${actionText} ${count} 首歌曲吗？${isAllSongsPlaylist ? '此操作不可撤销。' : ''}`)) {
+            return;
+        }
+
+        setIsBatchDeleting(true);
+        try {
+            if (selectedPlaylistId === allSongsPlaylistId) {
+                // "所有歌曲"歌单：永久删除
+                const resp = await axios.post('/songs/batch-delete', {
+                    songIds: selectedPlaylistSongIds
+                }, { headers: getAuthHeader() });
+                const result = resp.data;
+                setMessage(`批量删除完成: 成功 ${result.deleted} 首, 失败 ${result.failed} 首`, result.failed > 0 ? 'warning' : 'success');
+            } else {
+                // 普通歌单：批量移除关联
+                for (const songId of selectedPlaylistSongIds) {
+                    await axios.delete(`/playlists/${selectedPlaylistId}/songs/${songId}`, { headers: getAuthHeader() });
+                }
+                setMessage(`已从歌单移除 ${count} 首歌曲`, 'success');
+            }
+
+            setSelectedPlaylistSongIds([]);
+            await loadPlaylistDetail(selectedPlaylistId);
+            await loadAllSongs();
+        } catch {
+            setMessage('批量删除失败', 'error');
+        } finally {
+            setIsBatchDeleting(false);
+        }
+    }, [selectedPlaylistId, selectedPlaylistSongIds, allSongsPlaylistId, getAuthHeader, loadPlaylistDetail, loadAllSongs, setMessage]);
+
     // eslint-disable-next-line react-hooks/preserve-manual-memoization
     const removeSong = useCallback(async (songId: number) => {
         if (!selectedPlaylistId) {
@@ -394,11 +482,26 @@ export default function PlaylistManager() {
                         <h2 className={CL.headerTitle}>{selectedPlaylist?.playlist_name || '请选择歌单'}</h2>
                         <span className="text-sm text-text-quaternary">
                             已选 {selectedPlaylistSongIds.length} 首
+                            {(songFilter !== 'all' || songSearchQuery.trim()) && ` / 筛选 ${filteredPlaylistSongs.length} 首`}
                         </span>
                     </div>
                     <div className={CL.headerBtns}>
-                        <button type="button" className={CL.secondaryBtn} onClick={() => { void selectAllPlaylistSongs(); }}>全选所有</button>
+                        <button type="button" className={CL.secondaryBtn} onClick={() => { void selectAllPlaylistSongs(); }}>全选</button>
                         <button type="button" className={CL.secondaryBtn} onClick={selectAllCurrentPageSongs}>全选当前页</button>
+                        <button type="button" className={CL.secondaryBtn} onClick={() => {
+                            setSelectedPlaylistSongIds([]);
+                            setMessage('已取消全选', 'info');
+                        }}>取消</button>
+                        {selectedPlaylistSongIds.length > 0 && (
+                            <button
+                                type="button"
+                                className="border-none rounded-xl font-semibold cursor-pointer py-[9px] px-[14px] text-white bg-red-500 hover:bg-red-600 disabled:opacity-50"
+                                onClick={() => { void batchDeleteSelected(); }}
+                                disabled={isBatchDeleting}
+                            >
+                                {isBatchDeleting ? '删除中...' : `批量删除(${selectedPlaylistSongIds.length})`}
+                            </button>
+                        )}
                         <button type="button" className={CL.primaryBtn} onClick={() => {
                             if (!selectedPlaylistId) {
                                 setMessage('请先选择歌单', 'warning');
@@ -409,8 +512,40 @@ export default function PlaylistManager() {
                         <button type="button" className={CL.primaryBtn} onClick={openImportDialog}>导入歌曲</button>
                     </div>
                 </div>
+                <div className="flex gap-3 mb-3">
+                    <div className="relative flex-1">
+                        <input
+                            type="text"
+                            placeholder="搜索歌曲标题或艺术家..."
+                            value={songSearchQuery}
+                            onChange={(e) => setSongSearchQuery(e.target.value)}
+                            className="w-full border border-border rounded-lg px-3 py-2 pl-9 text-sm bg-surface-elevated focus:outline-none focus:border-primary"
+                        />
+                        <svg className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-text-quaternary" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
+                        </svg>
+                        {songSearchQuery && (
+                            <button
+                                type="button"
+                                onClick={() => setSongSearchQuery('')}
+                                className="absolute right-3 top-1/2 -translate-y-1/2 text-text-quaternary hover:text-text-primary"
+                            >
+                                ×
+                            </button>
+                        )}
+                    </div>
+                    <select
+                        value={songFilter}
+                        onChange={(e) => setSongFilter(e.target.value as SongFilter)}
+                        className="border border-border rounded-lg px-3 py-2 text-sm bg-surface-elevated"
+                    >
+                        <option value="all">全部</option>
+                        <option value="no_artist">artist为空</option>
+                        <option value="no_duration">duration为0</option>
+                    </select>
+                </div>
                 <ul className={CL.songList}>
-                    {playlistSongs.map((song) => (
+                    {filteredPlaylistSongs.map((song) => (
                         <li key={song.id} className={CL.songItem}>
                             <input
                                 type="checkbox"
@@ -420,14 +555,14 @@ export default function PlaylistManager() {
                             />
                             <div className="flex-1">
                                 <div className={CL.songTitle}>{song.title}</div>
-                                <div className={CL.songSub}>{song.artist}</div>
+                                <div className={CL.songSub}>{song.artist || '(无艺术家)'} {song.duration === 0 && <span className="text-red-500">无时长</span>}</div>
                             </div>
                             <button type="button" className={CL.secondaryBtn} onClick={() => { void removeSong(song.id); }}>
                                 {selectedPlaylistId === allSongsPlaylistId ? '永久删除' : '删除'}
                             </button>
                         </li>
                     ))}
-                    {playlistSongs.length === 0 && <li className={CL.empty}>当前歌单还没有歌曲</li>}
+                    {filteredPlaylistSongs.length === 0 && <li className={CL.empty}>当前歌单还没有歌曲</li>}
                 </ul>
                 {selectedPlaylistId && (
                     <Pagination

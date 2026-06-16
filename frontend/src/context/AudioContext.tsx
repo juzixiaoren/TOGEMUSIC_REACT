@@ -139,9 +139,11 @@ export const AudioProvider = ({ children }: { children: ReactNode }) => {
             };
 
             audio.onerror = () => {
-                console.error('音频加载失败');
-                setMessage(`加载歌曲失败: ${song.title}`, 'error');
+                console.error('音频加载失败，自动跳到下一首');
+                setMessage(`加载歌曲失败: ${song.title}，自动跳歌`, 'warning');
                 isInitializingRef.current = false;
+                // 音频加载失败（如无VIP Cookie），自动请求下一首
+                emitRequestNextSong();
             };
 
             audioRef.current = audio;
@@ -165,7 +167,7 @@ export const AudioProvider = ({ children }: { children: ReactNode }) => {
             document.addEventListener('click', unlock);
             return false;
         }
-    }, [cleanupAudio, setMessage, startTimeUpdate, stopTimeUpdate, volume]);
+    }, [cleanupAudio, emitRequestNextSong, setMessage, startTimeUpdate, stopTimeUpdate, volume]);
 
     // 切歌功能（通过 Socket）
     const nextSong = useCallback(() => {

@@ -6,7 +6,8 @@ Cookie池管理路由 + 用户音乐平台登录路由
 
 import os
 import re
-import json
+import time
+import requests
 import asyncio
 import threading
 import atexit
@@ -793,20 +794,36 @@ def _verify_qqmusic_cookie(cookie: str) -> bool:
 def _detect_qqmusic_vip(cookie: str, uin: str) -> bool:
     """通过 QQ 音乐 profile API 检测用户是否为 VIP"""
     try:
+        uin = str(uin).lstrip("o")
+        uin_num = int(uin)
         url = "https://c6.y.qq.com/rsc/fcgi-bin/fcg_get_profile_homepage.fcg"
         params = {
-            "uin": int(uin),
+            "_": int(time.time() * 1000),
+            "cv": 4747474,
+            "ct": 24,
             "format": "json",
             "inCharset": "utf-8",
             "outCharset": "utf-8",
+            "notice": 0,
             "platform": "yqq.json",
+            "needNewCode": 0,
+            "uin": uin_num,
+            "g_tk_new_20200303": 0,
+            "g_tk": 0,
             "cid": 205360838,
-            "userid": int(uin),
+            "userid": uin_num,
+            "reqfrom": 1,
+            "reqtype": 0,
             "hostUin": 0,
-            "loginUin": int(uin),
+            "loginUin": uin_num,
         }
         headers = {
-            "User-Agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36",
+            "User-Agent": (
+                "Mozilla/5.0 (Windows NT 10.0; Win64; x64) "
+                "AppleWebKit/537.36 (KHTML, like Gecko) "
+                "Chrome/120.0.0.0 Safari/537.36"
+            ),
+            "Referer": f"https://y.qq.com/portal/profile.html?uin={uin}",
             "Cookie": cookie,
         }
         resp = requests.get(url, params=params, headers=headers, timeout=10)
@@ -814,13 +831,33 @@ def _detect_qqmusic_vip(cookie: str, uin: str) -> bool:
         # 检查VIP相关字段
         profile_data = data.get("data", {})
         vip_info = profile_data.get("vip_info", {})
-        # vip > 0 或 svip > 0 表示VIP用户
-        if vip_info.get("vip", 0) > 0 or vip_info.get("svip", 0) > 0:
+        
+        # 检查vip_info中的VIP状态
+        vip_status = int(vip_info.get("vip") or 0)
+        svip_status = int(vip_info.get("svip") or 0)
+        
+        if vip_status > 0 or svip_status > 0:
             return True
-        # 也可以检查 creator 中的 vip 标识
+        
+        # 检查creator中的VIP标识
         creator = profile_data.get("creator", {})
         if creator.get("isVip", 0) > 0:
             return True
+        
+        # 检查creator.lvinfo中的VIP图标（关键字段！）
+        # lvinfo[0].iconurl 包含 "svip_g.png" 或 "vip_g.png" 表示VIP用户
+        lvinfo = creator.get("lvinfo", [])
+        for lv in lvinfo:
+            iconurl = lv.get("iconurl", "")
+            if "svip" in iconurl.lower() or "vip" in iconurl.lower():
+                print(f"🔍 QQ音乐VIP检测 uin={uin}: 通过lvinfo检测到VIP, iconurl={iconurl}")
+                return True
+        
+        # 检查其他可能的VIP字段
+        if profile_data.get("isVip", 0) > 0:
+            return True
+        
+        print(f"🔍 QQ音乐VIP检测 uin={uin}: 未检测到VIP状态")
         return False
     except Exception as e:
         print(f"⚠️ VIP检测API失败: {e}")
@@ -939,9 +976,6 @@ def _run_puppeteer_login(user_id: int, platform: str):
             if key in _puppeteer_status:
                 del _puppeteer_status[key]
 
-
-import time
-import requests
 
 def fetch_user_playlists(cookie: str, uin: str, offset: int = 0, limit: int = 30):
     uin = str(uin).lstrip("o")
@@ -1409,6 +1443,7 @@ def netease_import_playlist():
         # 导入歌曲（只保存元数据和song_id，不获取播放URL）
         imported_count = 0
         failed_count = 0
+        skipped_count = 0
         batch_size = 500
         
         batch_ops = []
@@ -1416,12 +1451,17 @@ def netease_import_playlist():
         for idx, song_info in enumerate(songs):
             try:
                 netease_song_id = song_info.get('song_id', '')
-                title = song_info.get('title', str(netease_song_id))
-                artist = song_info.get('artist', '')
+                title = (song_info.get('title') or '').strip()
+                artist = (song_info.get('artist') or '').strip()
                 duration = song_info.get('duration', 0)
 
                 if not netease_song_id:
                     failed_count += 1
+                    continue
+
+                # 数据完整性校验：缺失title/artist/duration的歌曲跳过导入
+                if not title or not artist or not duration:
+                    skipped_count += 1
                     continue
 
                 # 检查歌曲是否已存在
@@ -1479,10 +1519,15 @@ def netease_import_playlist():
             except Exception as e:
                 print(f"批量提交失败: {e}")
 
+        msg = f'导入完成: 成功 {imported_count} 首, 失败 {failed_count} 首'
+        if skipped_count > 0:
+            msg += f', 跳过(数据不完整) {skipped_count} 首'
+
         return jsonify({
-            'message': f'导入完成: 成功 {imported_count} 首, 失败 {failed_count} 首',
+            'message': msg,
             'imported': imported_count,
             'failed': failed_count,
+            'skipped': skipped_count,
             'playlist_id': target_playlist_id,
             'playlist_name': playlist_name,
             'cover_url': cover_url,

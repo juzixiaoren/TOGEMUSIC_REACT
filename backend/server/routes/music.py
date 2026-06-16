@@ -273,17 +273,20 @@ def _parse_range(range_header: str, file_size: int):
             length = int(end_str)
             start = max(file_size - length, 0)
             end = file_size - 1
-            return start, end, False
         else:
             start = int(start_str)
             if end_str:
                 end = int(end_str)
-                return start, end, False
-            # 开放区间: bytes=start-
-            end = file_size - 1
-            return start, end, True
+            else:
+                # 开放区间: bytes=start-
+                end = file_size - 1
+        
+        # 验证范围有效性
         if start > end or start < 0 or end >= file_size:
             return None
+        
+        is_open_ended = (end == file_size - 1 and not end_str)
+        return start, end, is_open_ended
     except Exception:
         return None
 
@@ -1094,8 +1097,8 @@ def delete_song_permanently(song_id):
     stored_path = song['file_path'] if isinstance(song, dict) else song[5]
 
     # 从数据库删除（包括所有歌单关联）
-    deleted = song_model.delete_song(song_id)
-    if not deleted:
+    success, deleted_song = song_model.delete_song(song_id)
+    if not success:
         return jsonify({'message': 'Delete failed'}), 500
 
     # 如果是COS存储，删除COS对象
@@ -1110,18 +1113,67 @@ def delete_song_permanently(song_id):
     return jsonify({'message': 'Song deleted permanently'}), 200
 
 
+@music_bp.route('/songs/batch-delete', methods=['POST'])
+def batch_delete_songs():
+    """批量永久删除歌曲"""
+    token = request.headers.get('Authorization')
+    user_id = verify_token(token)
+    if not user_id:
+        return jsonify({'message': 'Invalid token'}), 401
+
+    data = request.get_json() or {}
+    song_ids = data.get('songIds', [])
+    if not song_ids:
+        return jsonify({'message': 'songIds is required'}), 400
+
+    deleted_count = 0
+    failed_count = 0
+
+    for song_id in song_ids:
+        try:
+            song = song_model.get_song_by_id(song_id)
+            if not song:
+                failed_count += 1
+                continue
+
+            stored_path = song['file_path'] if isinstance(song, dict) else song[5]
+
+            success, deleted_song = song_model.delete_song(song_id)
+            if not success:
+                failed_count += 1
+                continue
+
+            # 如果是COS存储，删除COS对象
+            if stored_path and isinstance(stored_path, str) and stored_path.startswith('cos:'):
+                try:
+                    from utils.cos_storage import delete_cos_object, extract_cos_key_from_path
+                    cos_key = extract_cos_key_from_path(stored_path)
+                    delete_cos_object(cos_key)
+                except Exception as e:
+                    print(f'删除COS文件失败（不影响歌曲删除）: {e}')
+
+            deleted_count += 1
+        except Exception as e:
+            print(f'删除歌曲{song_id}失败: {e}')
+            failed_count += 1
+
+    return jsonify({
+        'message': f'批量删除完成: 成功 {deleted_count} 首, 失败 {failed_count} 首',
+        'deleted': deleted_count,
+        'failed': failed_count
+    }), 200
+
+
 @music_bp.route('/songs/<int:song_id>/file.<ext>', methods=['GET'])
 def get_song_file(song_id, ext):
     song = song_model.get_song_by_id(song_id)
     if not song:
         abort(404, description='Song not found')
 
-    # song[5] is the stored file path. It might be a Windows path, a remote URL, or a COS key.
-    stored_path = song[5]
-    
-    # 检查是否是网易云歌曲（platform字段在song[7]，platform_song_id在song[8]）
-    platform = song[7] if len(song) > 7 else 'local'
-    platform_song_id = song[8] if len(song) > 8 else None
+    # song是sqlite3.Row对象，支持字典访问
+    stored_path = song['file_path']
+    platform = song['platform'] if song['platform'] else 'local'
+    platform_song_id = song['platform_song_id']
     
     # 如果是网易云歌曲且没有存储的URL，动态获取播放链接
     if platform == 'netease' and platform_song_id and (not stored_path or stored_path == 'None'):

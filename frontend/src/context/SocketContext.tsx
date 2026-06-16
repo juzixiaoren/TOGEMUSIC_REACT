@@ -206,19 +206,35 @@ export const SocketProvider = ({ children }: { children: ReactNode }) => {
 
 
     const emitRequestNextSong = (callback?: (response: { success: boolean }) => void) => {
-        socketRef.current?.emit('request_next_song', {}, callback);
+        if (callback) {
+            socketRef.current?.emit('request_next_song', {}, callback);
+        } else {
+            socketRef.current?.emit('request_next_song', {});
+        }
     };
 
     const emitRequestPrevSong = (callback?: (response: { success: boolean }) => void) => {
-        socketRef.current?.emit('request_prev_song', {}, callback);
+        if (callback) {
+            socketRef.current?.emit('request_prev_song', {}, callback);
+        } else {
+            socketRef.current?.emit('request_prev_song', {});
+        }
     };
 
     const emitRequestShuffle = (callback?: (response: { success: boolean }) => void) => {
-        socketRef.current?.emit('request_shuffle_playlist', {}, callback);
+        if (callback) {
+            socketRef.current?.emit('request_shuffle_playlist', {}, callback);
+        } else {
+            socketRef.current?.emit('request_shuffle_playlist', {});
+        }
     };
 
     const emitToggleLoopMode = (enabled: boolean, callback?: (response: { success: boolean }) => void) => {
-        socketRef.current?.emit('toggle_loop_mode', { enabled }, callback);
+        if (callback) {
+            socketRef.current?.emit('toggle_loop_mode', { enabled }, callback);
+        } else {
+            socketRef.current?.emit('toggle_loop_mode', { enabled });
+        }
     };
 
     const registerEventHandlers = (handlers: SocketEventHandlers) => {

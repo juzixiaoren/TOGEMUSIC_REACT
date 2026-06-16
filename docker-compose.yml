@@ -2,7 +2,7 @@ services:
   frontend:
     build:
       context: ./frontend
-    image: juzixiaoren/togemusic-react:frontend-v9 # 您的前端镜像名
+    image: juzixiaoren/togemusic-react:frontend-v11 # 您的前端镜像名
     ports:
       - "14514:14514"
     depends_on:
@@ -10,7 +10,7 @@ services:
 
   backend:
     build: ./backend
-    image: juzixiaoren/togemusic-react:backend-v9 # 您的后端镜像名
+    image: juzixiaoren/togemusic-react:backend-v11 # 您的后端镜像名
     ports:
       - "8034:8034"
     depends_on:

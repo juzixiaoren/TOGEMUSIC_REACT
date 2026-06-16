@@ -79,9 +79,9 @@ type DrawerSearchPanelProps = {
     playlistSongsMap: Record<number, Song[]>;
     selectedSongs: number[];
     onTogglePlaylistExpand: (playlistId: number) => void;
-    onSelectAllFromPlaylist: (playlistId: number) => void;
-    onSelectAllCurrentPageFromPlaylist: (playlistId: number) => void;
-    onClearSelectionFromPlaylist: (playlistId: number) => void;
+    onSelectAllFromPlaylist?: (playlistId: number) => void;
+    onSelectAllCurrentPageFromPlaylist?: (playlistId: number) => void;
+    onClearSelectionFromPlaylist?: (playlistId: number) => void;
     onToggleSong: (songId: number, checked: boolean) => void;
     onImportSelectedSongs: () => void;
     onSongImported: () => void;
@@ -155,9 +155,9 @@ export default function DrawerSearchPanel({
     playlistSongsMap,
     selectedSongs,
     onTogglePlaylistExpand,
-    onSelectAllFromPlaylist,
-    onSelectAllCurrentPageFromPlaylist,
-    onClearSelectionFromPlaylist,
+    onSelectAllFromPlaylist: _onSelectAllFromPlaylist,
+    onSelectAllCurrentPageFromPlaylist: _onSelectAllCurrentPageFromPlaylist,
+    onClearSelectionFromPlaylist: _onClearSelectionFromPlaylist,
     onToggleSong,
     onImportSelectedSongs,
     onSongImported,
@@ -357,12 +357,26 @@ export default function DrawerSearchPanel({
                                     </button>
                                     <span className={CL.playlistName}>所有歌曲（{allSongs.length}）</span>
                                     <button type="button" className={CL.selectBtn} onClick={() => {
-                                        for (const song of allSongs) {
+                                        const filterLower = songFilter.trim().toLowerCase();
+                                        const filteredSongs = filterLower
+                                            ? allSongs.filter((song) =>
+                                                song.title.toLowerCase().includes(filterLower) ||
+                                                song.artist.toLowerCase().includes(filterLower)
+                                            )
+                                            : allSongs;
+                                        for (const song of filteredSongs) {
                                             if (!selectedSongs.includes(song.id)) onToggleSong(song.id, true);
                                         }
                                     }}>全选</button>
                                     <button type="button" className={CL.selectBtn} onClick={() => {
-                                        for (const song of allSongs) {
+                                        const filterLower = songFilter.trim().toLowerCase();
+                                        const filteredSongs = filterLower
+                                            ? allSongs.filter((song) =>
+                                                song.title.toLowerCase().includes(filterLower) ||
+                                                song.artist.toLowerCase().includes(filterLower)
+                                            )
+                                            : allSongs;
+                                        for (const song of filteredSongs) {
                                             if (selectedSongs.includes(song.id)) onToggleSong(song.id, false);
                                         }
                                     }}>取消</button>
@@ -433,9 +447,47 @@ export default function DrawerSearchPanel({
                                             <span className="text-xs text-text-quaternary mr-2">
                                                 {songs.length} 首
                                             </span>
-                                            <button type="button" className={CL.selectBtn} onClick={() => onSelectAllFromPlaylist(playlist.id)}>全选所有</button>
-                                            <button type="button" className={CL.selectBtn} onClick={() => onSelectAllCurrentPageFromPlaylist(playlist.id)}>全选当前页</button>
-                                            <button type="button" className={CL.selectBtn} onClick={() => onClearSelectionFromPlaylist(playlist.id)}>取消</button>
+                                            <button type="button" className={CL.selectBtn} onClick={() => {
+                                                const filterLower = songFilter.trim().toLowerCase();
+                                                const filteredSongs = filterLower
+                                                    ? songs.filter((song) =>
+                                                        song.title.toLowerCase().includes(filterLower) ||
+                                                        song.artist.toLowerCase().includes(filterLower)
+                                                    )
+                                                    : songs;
+                                                for (const song of filteredSongs) {
+                                                    if (!selectedSongs.includes(song.id)) onToggleSong(song.id, true);
+                                                }
+                                            }}>全选所有</button>
+                                            <button type="button" className={CL.selectBtn} onClick={() => {
+                                                const filterLower = songFilter.trim().toLowerCase();
+                                                const filteredSongs = filterLower
+                                                    ? songs.filter((song) =>
+                                                        song.title.toLowerCase().includes(filterLower) ||
+                                                        song.artist.toLowerCase().includes(filterLower)
+                                                    )
+                                                    : songs;
+                                                const pagination = playlistPagination[playlist.id];
+                                                const currentPage = pagination?.currentPage || 1;
+                                                const startIndex = (currentPage - 1) * pageSize;
+                                                const endIndex = startIndex + pageSize;
+                                                const pageSongs = filteredSongs.slice(startIndex, endIndex);
+                                                for (const song of pageSongs) {
+                                                    if (!selectedSongs.includes(song.id)) onToggleSong(song.id, true);
+                                                }
+                                            }}>全选当前页</button>
+                                            <button type="button" className={CL.selectBtn} onClick={() => {
+                                                const filterLower = songFilter.trim().toLowerCase();
+                                                const filteredSongs = filterLower
+                                                    ? songs.filter((song) =>
+                                                        song.title.toLowerCase().includes(filterLower) ||
+                                                        song.artist.toLowerCase().includes(filterLower)
+                                                    )
+                                                    : songs;
+                                                for (const song of filteredSongs) {
+                                                    if (selectedSongs.includes(song.id)) onToggleSong(song.id, false);
+                                                }
+                                            }}>取消</button>
                                         </div>
                                         {isExpanded && (
                                             <div>

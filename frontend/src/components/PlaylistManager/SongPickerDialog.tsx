@@ -9,7 +9,8 @@ const CL = {
     createLabel: 'text-[13px] text-text-blue-label',
     createInput: 'rounded-lg border border-border-blue-input py-2 px-2.5 text-[13px]',
     tabs: 'flex gap-2',
-    tabBtn: 'bg-surface-elevated rounded-lg cursor-pointer border border-border-blue-page py-2 px-3 text-text-blue-muted',
+    tabBtn: 'rounded-lg cursor-pointer border border-border-blue-page py-2 px-3',
+    tabBtnNormal: 'bg-surface-elevated text-text-blue-muted',
     tabBtnActive: 'border-transparent text-white bg-primary',
     filterRow: 'flex gap-2 flex-wrap',
     filterInput: 'rounded-lg border border-border-blue-input py-2 px-2.5 text-[13px] flex-1 min-w-[240px]',
@@ -175,14 +176,14 @@ export default function SongPickerDialog(props: SongPickerDialogProps) {
                 <div className={CL.tabs}>
                     <button
                         type="button"
-                        className={`${CL.tabBtn} ${activeTab === 'songs' ? CL.tabBtnActive : ''}`}
+                        className={`${CL.tabBtn} ${activeTab === 'songs' ? CL.tabBtnActive : CL.tabBtnNormal}`}
                         onClick={() => onTabChange('songs')}
                     >
                         从所有音乐选择
                     </button>
                     <button
                         type="button"
-                        className={`${CL.tabBtn} ${activeTab === 'playlists' ? CL.tabBtnActive : ''}`}
+                        className={`${CL.tabBtn} ${activeTab === 'playlists' ? CL.tabBtnActive : CL.tabBtnNormal}`}
                         onClick={() => onTabChange('playlists')}
                     >
                         从其他歌单选择

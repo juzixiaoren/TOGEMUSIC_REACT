@@ -90,7 +90,8 @@ def stop_playback_if_no_users():
                     'play_start_time': None,
                     'is_playing': False,
                     'current_song': None,
-                    'server_now': now_ms()
+                    'server_now': now_ms(),
+                    'loop_mode': loop_mode
                 }, room=None)
                 print("⏹️ 在线用户为0，已自动停止播放")
         except Exception as e:
@@ -269,10 +270,20 @@ def create_app():
                 current_song_row = cursor.fetchone()
                 current_song = dict(current_song_row) if current_song_row else None
                 
+                print(f"📡 发送 sync_play_status, loop_mode: {loop_mode}")
                 socketio.emit('sync_play_status', {
                     'play_start_time': status["play_start_time"],
                     'is_playing': status["is_playing"],
                     'current_song': current_song,
+                    'server_now': now_ms(),
+                    'loop_mode': loop_mode
+                }, room=request.sid)
+            else:
+                # 无播放状态时，仍需同步循环模式
+                socketio.emit('sync_play_status', {
+                    'play_start_time': None,
+                    'is_playing': False,
+                    'current_song': None,
                     'server_now': now_ms(),
                     'loop_mode': loop_mode
                 }, room=request.sid)
@@ -425,7 +436,7 @@ def create_app():
             return {'success': False, 'error': str(e)}
 
     @socketio.on('toggle_loop_mode')
-    def handle_toggle_loop_mode(data=None):
+    def handle_toggle_loop_mode(data=None, **kwargs):
         """切换循环播放模式"""
         global loop_mode, history_queue
         try:
@@ -438,9 +449,6 @@ def create_app():
             # 切换为循环模式时清空历史队列
             if loop_mode:
                 history_queue.clear()
-                print("🔄 循环模式开启，已清空历史队列")
-            else:
-                print("🔄 循环模式关闭")
 
             socketio.emit('loop_mode_changed', {'enabled': loop_mode}, room=None)
             return {'success': True, 'enabled': loop_mode}

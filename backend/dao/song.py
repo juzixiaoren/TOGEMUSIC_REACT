@@ -31,15 +31,27 @@ class Song:
         return cursor.fetchall()
     
     def get_song_by_id(self, song_id):
-        cursor = self.execute("SELECT * FROM songs WHERE id = ?", (song_id,))
-        return cursor.fetchone()
+        try:
+            cursor = self.execute("SELECT * FROM songs WHERE id = ?", (song_id,))
+            return cursor.fetchone()
+        except Exception as e:
+            print(f"查询歌曲失败 song_id={song_id}: {e}")
+            return None
     
     def add_song(self, title, artist, duration, file_path, uploader_id, file_extension, platform='local', platform_song_id=None, auto_commit=True):
-        cursor = self.execute("INSERT INTO songs (title, artist, duration, file_path, uploader_id, file_extension, platform, platform_song_id) VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
-                     (title, artist, duration, file_path, uploader_id, file_extension, platform, platform_song_id))
-        if auto_commit:
-            self.commit()
-        return cursor.lastrowid
+        try:
+            cursor = self.execute("INSERT INTO songs (title, artist, duration, file_path, uploader_id, file_extension, platform, platform_song_id) VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
+                         (title, artist, duration, file_path, uploader_id, file_extension, platform, platform_song_id))
+            if auto_commit:
+                self.commit()
+            return cursor.lastrowid
+        except Exception as e:
+            print(f"添加歌曲失败 title={title}, artist={artist}: {e}")
+            try:
+                self.get_conn().rollback()
+            except Exception:
+                pass
+            return None
     def get_play_status(self):
         cursor = self.execute("""
                             SELECT play_start_time ,is_playing,song_id
@@ -50,22 +62,45 @@ class Song:
                             """)
         return cursor.fetchone()
     def set_play_status(self, play_start_time, is_playing):
-        self.execute("""
-                    UPDATE room_play_state
-                    SET play_start_time = ?, is_playing = ?
-                    """, (play_start_time, is_playing))
-        self.commit()
+        try:
+            self.execute("""
+                        UPDATE room_play_state
+                        SET play_start_time = ?, is_playing = ?
+                        """, (play_start_time, is_playing))
+            self.commit()
+        except Exception as e:
+            print(f"设置播放状态失败: {e}")
+            try:
+                self.get_conn().rollback()
+            except Exception:
+                pass
+            raise
     def delete_song(self, song_id):
-        """永久删除歌曲：移除所有歌单关联，删除歌曲记录。返回歌曲信息（用于清理COS文件）"""
-        song = self.get_song_by_id(song_id)
-        if not song:
-            return None
-        # 先删除所有歌单关联
-        self.execute("DELETE FROM playlist_songs WHERE song_id = ?", (song_id,))
-        # 再删除歌曲记录
-        self.execute("DELETE FROM songs WHERE id = ?", (song_id,))
-        self.commit()
-        return dict(song)
+        """永久删除歌曲：移除所有歌单关联，删除歌曲记录。
+        返回: (success: bool, song_info: dict or None)
+        - 成功: (True, song_info_dict)
+        - 歌曲不存在: (False, None)
+        - 删除失败: (False, None)
+        """
+        try:
+            song = self.get_song_by_id(song_id)
+            if not song:
+                return False, None
+            
+            song_info = dict(song)
+            # 先删除所有歌单关联
+            self.execute("DELETE FROM playlist_songs WHERE song_id = ?", (song_id,))
+            # 再删除歌曲记录
+            self.execute("DELETE FROM songs WHERE id = ?", (song_id,))
+            self.commit()
+            return True, song_info
+        except Exception as e:
+            print(f"删除歌曲失败 song_id={song_id}: {e}")
+            try:
+                self.get_conn().rollback()
+            except Exception:
+                pass
+            return False, None
 
     def get_song_duration(self, song_id):
         cursor = self.execute("SELECT duration FROM songs WHERE id = ?", (song_id,))

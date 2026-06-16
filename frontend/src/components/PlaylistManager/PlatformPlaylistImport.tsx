@@ -40,7 +40,7 @@ const CL = {
     selectedCount: 'text-sm text-text-secondary',
     footerBtns: 'flex gap-3',
     cancelBtn: 'bg-surface-elevated rounded-lg cursor-pointer py-2.5 px-5 border border-border text-sm text-text-secondary transition-all duration-200 hover:border-text-tertiary hover:text-text-primary',
-    importBtn: 'border-none rounded-lg font-semibold cursor-pointer py-2.5 px-6 bg-gradient-qq text-sm text-white transition-all duration-200 hover:-translate-y-px hover:shadow-active-green disabled:opacity-60 disabled:cursor-not-allowed',
+    importBtn: 'border-none rounded-lg font-semibold cursor-pointer py-2.5 px-6 bg-platform-qq text-sm text-white transition-all duration-200 hover:-translate-y-px hover:shadow-active-green disabled:opacity-60 disabled:cursor-not-allowed',
     loadingText: 'text-center py-10 text-sm text-text-tertiary',
     emptyText: 'text-center py-10 text-sm text-text-tertiary',
 };

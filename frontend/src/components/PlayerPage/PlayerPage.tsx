@@ -559,7 +559,6 @@ export default function PlayerPage() {
     const toggleLoopMode = useCallback(() => {
         const newMode = !loopMode;
         setLoopMode(newMode);
-        // 通知后端
         if (emitToggleLoopMode) {
             emitToggleLoopMode(newMode);
         }

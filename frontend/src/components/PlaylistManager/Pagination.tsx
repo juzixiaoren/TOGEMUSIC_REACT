@@ -45,7 +45,8 @@ export default function Pagination({ currentPage, totalPages, onPageChange }: Pa
     };
 
     const btnClass = "border border-border-blue-page bg-surface-elevated rounded-lg px-3 py-1.5 cursor-pointer text-text-blue-muted text-xs transition-all duration-200 hover:border-primary hover:text-primary disabled:opacity-50 disabled:cursor-not-allowed";
-    const pageBaseClass = "w-8 h-8 border border-border-blue-page bg-surface-elevated rounded-lg cursor-pointer text-text-blue-muted text-xs flex items-center justify-center transition-all duration-200 hover:border-primary hover:text-primary";
+    const pageBaseClass = "w-8 h-8 border rounded-lg cursor-pointer text-xs flex items-center justify-center transition-all duration-200";
+    const pageNormalClass = "border-border-blue-page bg-surface-elevated text-text-blue-muted hover:border-primary hover:text-primary";
     const pageActiveClass = "border-transparent text-white bg-primary";
 
     return (
@@ -62,7 +63,7 @@ export default function Pagination({ currentPage, totalPages, onPageChange }: Pa
                     typeof page === 'number' ? (
                         <button
                             key={index}
-                            className={`${pageBaseClass} ${currentPage === page ? pageActiveClass : ''}`}
+                            className={`${pageBaseClass} ${currentPage === page ? pageActiveClass : pageNormalClass}`}
                             onClick={() => onPageChange(page)}
                         >
                             {page}
